@@ -119,7 +119,9 @@ def use_resource(state: RuntimeState) -> dict:
 `KeepRef` 不承诺节点输入与 live state 使用同一个字典。它保证：
 
 1. 节点执行前复制 state 时，该字段不被 deepcopy；
-2. 应用 `Command` 复制显式 update 时，该字段继续保留引用。
+2. 当该字段通过 `Command` 的 update 更新时，update 中该字段携带的对象不被拷贝。
+
+> 不推荐 `KeepRef` 字段被 `Command` 的 update 更新。取决于具体的节点逻辑，这样更新可能导致不可预测的行为。
 
 `Command` 会直接更新当前 `GraphContext.state`，不会为每条命令复制整个旧 state。普通 update value 仍会被深拷贝，标记为 `KeepRef` 的 update value 则保留引用。
 

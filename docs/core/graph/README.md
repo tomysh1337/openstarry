@@ -414,6 +414,15 @@ graph.decompose()
 
 `decompose()` 幂等，但存在活跃调用时会拒绝执行。
 
+## 使用上下文管理协议自动管理图的生命周期
+
+```python
+with graph:
+    pass
+```
+
+上下文管理器退出后，graph会自动执行清理，适用于graph被一次性调用的场景。
+
 ## 继续阅读
 
 - [状态模型、Command 与复制语义](./state.md)
