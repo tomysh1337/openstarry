@@ -211,7 +211,7 @@ def test_from_snapshot_rejects_missing_snapshot(snapshot):
 
 def test_from_snapshot_rejects_invalid_container():
     """The public restoration API validates its container contract."""
-    with pytest.raises(TypeError, match="dict or a list of dicts"):
+    with pytest.raises(RuntimeError, match="without a snapshot"):
         GraphContext.from_snapshot(())
 
 

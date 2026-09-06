@@ -101,7 +101,7 @@ class NodeGraph:
         """Subscribe the graph's single namespace-scoped dispatch handler."""
         async def dispatch_node(event: ApixEvent) -> None:
             """Dispatch an active context to its currently targeted node."""
-            context = event.context
+            context: GraphContext = event.context
             if not self._is_active_context(context):
                 return
 

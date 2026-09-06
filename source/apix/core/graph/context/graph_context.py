@@ -128,7 +128,7 @@ class GraphContext:
     @classmethod
     def from_snapshot(
         cls,
-        snapshot: GraphContextSnapshot | list[GraphContextSnapshot] | None,
+        snapshot: GraphContextSnapshot | list[GraphContextSnapshot],
         state_schema: type | None = None,
         *,
         version: int = -1,
@@ -160,14 +160,12 @@ class GraphContext:
             ValueError: If the snapshot is missing required fields or contains
                 a negative step count.
         """
-        if snapshot is None:
-            raise RuntimeError("Cannot restore a GraphContext without a snapshot.")
+        if not snapshot:
+            raise RuntimeError(
+                "Cannot restore a GraphContext without a snapshot."
+            )
 
         if isinstance(snapshot, list):
-            if not snapshot:
-                raise RuntimeError(
-                    "Cannot restore a GraphContext without a snapshot."
-                )
             selected_snapshot = snapshot[version]
             snapshot_history = snapshot[:version] + [selected_snapshot]
         elif isinstance(snapshot, dict):
