@@ -78,6 +78,7 @@ class ApixEvent:
     context: Any
     timestamp: float
     accepted: bool = False
+    error_stack: list[ApixEventError] = field(default_factory=list)
 ```
 
 公开成员：
@@ -89,13 +90,15 @@ class ApixEvent:
 | `event_name` | 用于订阅匹配的精确名称，匹配时区分大小写 |
 | `context` | 任意上下文；跨进程传输时必须可 JSON 序列化 |
 | `timestamp` | Unix 时间戳 |
-| `accepted` | 是否已停止后续前台处理器分发 |
+| `accepted` | 是否显式接受事件；后续 handler 跳过核心函数，仍执行通知 |
+| `error_stack` | 按发生顺序保存前台 handler 的 `ApixEventError` 列表 |
+| `has_error` | 只读属性，等价于 `bool(error_stack)` |
 | `datetime` | 将 `timestamp` 转换为本地 `datetime` 的只读属性 |
 | `accept()` | 将 `accepted` 设为 `True` |
 
 `_handler_chain_version` 是运行时内部字段，用于保存事件入队时的处理器链版本。应用代码不应手动修改。
 
-## 停止后续处理器
+## 接受事件与后续通知
 
 前台处理器可以调用 `event.accept()`：
 
@@ -107,10 +110,11 @@ async def reject_invalid_request(event: ApixEvent) -> None:
         event.accept()
 ```
 
-调用后，当前事件尚未执行的前台处理器会被跳过。需要注意：
+调用后，后续 handler 的 `core_func` 被跳过，但 `on_accepted` 仍会执行；如果已有错误，先调用 `on_has_error`。需要注意：
 
 - 已经创建的后台处理器任务不会被撤销。
-- 分发器在正常完成处理器链后也会将事件标记为 accepted。
+- 分发结束不会自动将事件标记为 accepted；该状态仅表示显式接受事件。
+- 后台 handler 在实际开始执行时判断事件状态；尚未开始的任务也可能转入通知分支。
 - `accept()` 控制的是当前事件实例，不会注销订阅。
 
 ## 事件循环
@@ -149,13 +153,19 @@ await EVENT_PIPE.join()
 
 ## 分发错误策略
 
-处理器异常和超时由事件循环记录，不会从 `EVENT_PIPE.post_event()` 反向抛给发布者，因为发布与处理是异步解耦的。
+处理器异常和超时由 `ApixEventHandler.execute()` 统一处理，不会从 `EVENT_PIPE.post_event()` 反向抛给发布者，因为发布与处理是异步解耦的。
 
-- `stop_when_error=True`：当前前台处理器失败后停止该事件的后续处理器。
-- `stop_when_error=False`：记录错误后继续分发。
-- `background=True`：异常只记录日志，不影响前台链。
-- `time_out=None`：无限等待。
+- `stop_when_error=True`：事件已有前置错误时，当前 handler 执行 `on_has_error`，跳过自己的 `core_func`。
+- `stop_when_error=False`：执行错误通知后，事件未被 accepted 时继续运行自己的 `core_func`。
+- `background=True`：核心函数和通知函数的未捕获异常、超时均只记录日志，不写入 `error_stack`，不影响其他 handler 的核心函数执行。
+- `time_out=None`：无限等待；正数超时分别应用于每个实际调用的核心函数或通知函数。
 - `time_out <= 0`：注册时被标准化为 `None`。
+
+`on_has_error` 只负责处理前置 handler 的错误。当前 handler 的核心函数或通知函数抛出未捕获异常时，先记录错误，再调用 `on_error(event, exception)`，不会回调自己的 `on_has_error`。`on_error` 自身再抛错仅记录，不递归调用；正常返回不会消除原始错误或重试失败函数。后台 handler 也调用 `on_error`，但异常不写入事件错误栈。任务取消保持 `CancelledError` 传播，不调用 `on_error`，不作为业务错误记录。
+
+需要局部恢复且不向事件记录错误时，仍在原函数内使用 `try/except/finally`。
+
+每条 `ApixEventError` 包含 `handler_name`、`phase`、`exception_type`、`message`、`traceback`。`phase` 为 `core_func`、`on_has_error`、`on_accepted` 或 `on_error`；traceback 保存文本，不保留异常对象或活动栈帧。序列化会保留这些字段。
 
 如果业务需要确认处理结果，应通过事件上下文中的 Future、队列或其他显式回传机制实现，而不是依赖 `post_event()` 返回值。
 

@@ -410,9 +410,9 @@ def subscribe(
     priority: float | None = None,
     between_handlers: tuple[str | None, str | None] | None = None,
     filter_event: list[str] | None = None,
-    stop_when_error: bool = True,
+    stop_when_error: bool | None = None,
     time_out: float | None = None,
-    background: bool = False,
+    background: bool | None = None,
 ):
     """Register an async handler for one or more event-name patterns.
 
@@ -685,9 +685,9 @@ def subscribe(
         entry.priority = priority
         entry.between_handlers = between_handlers
         # Decorator options, including defaults, override instance settings.
-        entry.stop_when_error = stop_when_error if stop_when_error is not None else entry.stop_when_error
+        entry.stop_when_error = stop_when_error if stop_when_error is not None else (entry.stop_when_error if entry.stop_when_error is not None else True)
         entry.time_out = time_out if time_out is not None else entry.time_out
-        entry.background = background if background is not None else entry.background
+        entry.background = background if background is not None else (entry.background if entry.background is not None else True)
         APIX_HANDLER_REGISTRY.register_handler(entry)
         return func
 
@@ -763,5 +763,6 @@ __all__ = [
     "get_unmatched_subscriptions",
     "subscribe",
     "unsubscribe",
+    "get_handler"
     "get_handler_meta"
 ]

@@ -126,6 +126,14 @@ await interrupt(
 
 `interrupt()` 本身不创建额外快照。Graph Runtime 已在当前节点或并发批次执行之前自动保存快照，所以取消中断会回到本次调度之前的状态。
 
+## Hook 错误与事件接受
+
+`interrupted_hook()` 注册的事件处理器会响应前置状态：前置前台 handler 报错时，通过 `block.fail(GraphNodeError(...))` 将错误交给等待中的节点；前置 handler 接受事件时，通过 `block.cancel()` 进入现有图中止流程。两种状态同时存在时先处理错误，不覆盖已完成的 Block。
+
+用户 hook 自己抛出的异常由事件系统记录后交给 `on_error(event, error)`，再通过 `block.fail(error)` 传给等待中的节点；不会回调自己的 `on_has_error`。节点仍可以用 `try/except` 自行处理 `await interrupt()` 收到的异常；未捕获时按现有节点失败流程结束图。只有 `interrupt(timeout=...)` 自身的等待期限到达才返回 `None`，hook 传回的 `TimeoutError` 不会被当作等待超时吞掉。
+
+这些通知需要存在通过 `interrupted_hook()` 或 `graph.add_interrupted_hook()` 注册的消费者。后台 handler 的未捕获异常仅记录日志，不产生错误通知。
+
 ## Block
 
 `Block` 是可 await 的冻结 dataclass：
@@ -140,8 +148,9 @@ await interrupt(
 | `cancelled` | Future 是否被取消 |
 | `resolve(result)` | 让节点以 result 继续 |
 | `cancel()` | 取消 Future，并触发当前 attempt abort |
+| `fail(error)` | 以异常结束 Future，将异常传回等待 `Block` 的节点 |
 
-`resolve()` 和 `cancel()` 都是一次性操作。Future 已完成后再次 `resolve()` 不产生效果。
+`resolve()`、`fail()` 和 `cancel()` 都是一次性操作。Future 已完成后再次调用不改变原结果。
 
 应用在外部保存 Block 时，建议以 `(run_id, block_id)` 为唯一键，而不是只按 namespace 或 data 查找。
 

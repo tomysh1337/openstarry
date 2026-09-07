@@ -17,6 +17,7 @@ from apix.core.event.handler_registry import (
     get_unmatched_subscriptions,
     subscribe,
     unsubscribe,
+    get_handler,
     get_handler_meta
 )
 from apix.core.event.event_registry import (
@@ -36,6 +37,6 @@ __all__ = [
     "GraphNodeError",
     "ApixHandlerRegistry", "APIX_HANDLER_REGISTRY",
     "subscribe", "unsubscribe", "delete_handler_from_registry",
-    "get_unmatched_subscriptions", "get_handler_meta",
+    "get_unmatched_subscriptions", "get_handler", "get_handler_meta",
     "ApixEventRegistry", "APIX_EVENT_REGISTRY"
 ]

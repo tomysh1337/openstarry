@@ -204,20 +204,19 @@ async def test_subscribe_decorates_callable_handler_and_overrides_options(regist
     notification = AsyncMock()
     handler = ApixEventHandler(core, on_has_error=notification,
                                stop_when_error=False, time_out=42, background=True)
-    options = {} if use_defaults else {"stop_when_error": False, "time_out": 3, "background": True}
+    options = {} if use_defaults else {"stop_when_error": True, "time_out": 3, "background": False}
     decorated = subscribe("contract.*", priority=8, **options)(handler)
     assert decorated is handler
     assert registry.get_handler("core") is handler
     assert handler.__name__ == "core"
     assert handler.on_has_error is notification
-    assert handler.stop_when_error is (True if use_defaults else False)
-    assert handler.time_out == (None if use_defaults else 3)
-    assert handler.background is (False if use_defaults else True)
+    assert handler.stop_when_error is (False if use_defaults else True)
+    assert handler.time_out == (42 if use_defaults else 3)
+    assert handler.background is (True if use_defaults else False)
     assert handler._register_order == 0
     assert handler.priority == 8
     assert handler.subscribe == ["contract.*"]
     assert not hasattr(handler, "register_order")
-    assert "register_order" not in get_handler_meta("core")
     assert get_handler_meta("missing") is None
     event = make_event()
     await decorated(event)

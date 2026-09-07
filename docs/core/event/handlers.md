@@ -17,7 +17,7 @@ subscribe(
 )
 ```
 
-装饰器只接受异步处理器作为正常用法。处理器收到一个 `ApixEvent`，并返回 `None`。
+装饰器接受异步函数或 `ApixEventHandler` 实例，并原样返回被装饰对象。`core_func`、`on_has_error` 和 `on_accepted` 接收 `ApixEvent`；`on_error` 接收 `(event, exception)`。所有回调均为异步函数，返回 `None`。
 
 ```python
 from apix.core.event import ApixEvent, subscribe
@@ -37,9 +37,87 @@ async def observe_agent_event(event: ApixEvent) -> None:
 | `priority` | 数值越大越先执行；同优先级保持注册顺序；默认 `1` |
 | `between_handlers` | 按已注册函数名将新处理器插入指定边界；不能与 `priority` 同用 |
 | `filter_event` | 在订阅命中后继续排除的 glob 模式 |
-| `stop_when_error` | 前台处理器异常后是否停止后续前台链 |
-| `time_out` | 最大运行秒数；`None` 或非正数表示无限等待 |
+| `stop_when_error` | 事件已有错误时是否跳过当前 handler 的核心函数；不跳过通知 |
+| `time_out` | 每个实际调用的回调分别限时；`None` 或非正数表示无限等待 |
 | `background` | 是否创建后台任务并立即继续分发 |
+
+## 带通知的处理器
+
+```python
+from apix.core.event import ApixEvent, ApixEventHandler, subscribe
+
+
+async def process_request(event: ApixEvent) -> None:
+    # Own failures must be handled here when local recovery is needed.
+    print("process", event.context)
+
+
+async def handle_upstream_error(event: ApixEvent) -> None:
+    # Release resources or complete pending futures owned by this handler.
+    for error in event.error_stack:
+        print(error.handler_name, error.phase, error.message)
+
+
+async def handle_accepted(event: ApixEvent) -> None:
+    print("request already accepted", event.event_id)
+
+
+async def handle_own_error(event: ApixEvent, error: Exception) -> None:
+    # Handle this handler's own failure using the original exception.
+    print("own failure", event.event_id, type(error).__name__, str(error))
+
+
+request_handler: ApixEventHandler = subscribe("request.*", time_out=5)(
+    ApixEventHandler(
+        process_request,
+        on_accepted=handle_accepted,
+        on_has_error=handle_upstream_error,
+        on_error=handle_own_error,
+    )
+)
+```
+
+`request_handler` 仍是原实例；`await request_handler(event)` 等价于 `await request_handler.execute(event)`。处理器使用 `core_func.__name__` 作为注册名。
+
+`subscribe()` 的参数（**包括默认值**）覆盖实例中的同名配置，保留通知回调。例如，实例设置 `background=True`，但装饰器传该参数为 `False`，则注册后实例的该值为 `False`。实例设置 `background=True`，但装饰器未传该参数，则注册后该实例值保持为 `True`。重复名称且 `exist_ok=True` 时直接忽略注册，不修改已有实例。
+
+执行规则如下：
+
+| 事件状态 | 当前 handler 行为 |
+| --- | --- |
+| 无错误，未 accepted | 调用 `core_func` |
+| 已有错误，未 accepted，`stop_when_error=True` | 调用 `on_has_error`，跳过 `core_func` |
+| 已有错误，未 accepted，`stop_when_error=False` | 调用 `on_has_error`，然后调用 `core_func` |
+| 无错误，已 accepted | 调用 `on_accepted`，跳过 `core_func` |
+| 已有错误，已 accepted | 依次调用 `on_has_error`、`on_accepted`，跳过 `core_func` |
+| 已有错误，调用 `on_has_error` 过程中 accepted | 依次调用 `on_has_error`、`on_accepted`，跳过 `core_func` |
+
+未设置的通知直接跳过。错误通知执行后会重新检查事件状态，因此通知中调用 `accept()` 也会阻止核心函数执行。每次 `execute()` 内同一种通知最多执行一次。
+
+核心函数自己的异常不会触发自己的 `on_has_error`；核心函数自己调用 `accept()` 也不会回调自己的 `on_accepted`。这些状态供之后的 handler 处理。
+
+### 当前 handler 的 on_error
+
+```python
+ApixEventHandler(
+    core_func,
+    on_accepted=None,
+    on_has_error=None,
+    on_error=None,
+    stop_when_error=True,
+    time_out=None,
+    background=False,
+)
+```
+
+`on_error` 的类型为 `EventHandlerErrorFunc = Callable[[ApixEvent, Exception], Awaitable[None]]`，可从 `apix.core.event` 导入。
+
+- `core_func`、`on_has_error`、`on_accepted` 中任何一个抛出未捕获异常或超时，都先记录错误，再调用 `on_error(event, exception)`；第二个参数是原始异常对象。
+- `on_error` 成功返回不会移除已记录的错误，也不会重试失败的函数。后续 handler 仍可通过 `on_has_error` 感知该失败。
+- 每次回调失败只调用一次 `on_error`。一次 `execute()` 内若多个回调依次失败，分别通知；`on_error` 自身失败则只记录 `phase="on_error"` 的错误信息在 `event.error_stack` 堆栈，不递归调用。
+- `time_out` 也独立应用于 `on_error`。任务取消继续传播，不调用 `on_error`，也不追加业务错误记录。
+- 后台 handler 同样调用 `on_error`，但原始错误和 `on_error` 自身错误都仅写日志，不写入事件错误栈。显式修改事件或业务上下文仍是回调自身的行为。
+- `subscribe()` 保留实例上的 `on_error`。若业务希望自行捕获并恢复异常而不留下事件失败记录，应继续在原函数内使用 `try/except/finally`。
 
 ## 匹配语义
 
@@ -176,8 +254,9 @@ async def write_audit_log(event: ApixEvent) -> None:
 
 - 分发器创建任务后立即继续处理下一个 handler。
 - 后台任务之间最多并发 100 个。
-- 异常和超时只记录日志。
-- `stop_when_error` 对后台异常没有停止前台链的作用。
+- 核心函数和通知函数的未捕获异常、超时只记录日志，不写入事件 `error_stack`。
+- `stop_when_error` 决定当前后台 handler 是否因已存在的前台错误跳过核心函数。
+- 在实际执行时检查 `has_error` 和 `accepted`，不会为已经执行结束的 handler 补发通知。
 - 后续前台处理器调用 `event.accept()` 时，已经开始的后台任务不会被取消。
 
 如果处理器必须在下一个处理器之前完成，不要设置 `background=True`。
@@ -245,7 +324,7 @@ meta = get_handler_meta("observe_agent_event")
 }
 ```
 
-调用前应确认处理器存在；当前实现面向已注册名称使用。
+处理器不存在时返回 `None`。
 
 ### 找出尚未匹配的订阅
 
@@ -265,23 +344,26 @@ patterns = get_unmatched_subscriptions("observe_agent_event")
 from apix.core.event import ApixEventHandler
 ```
 
-该 dataclass 保存一个处理器 entry：
+该类封装核心函数和两个前置状态通知函数：
 
 | 字段 | 说明 |
 | --- | --- |
 | `name` | 全局唯一处理器名 |
-| `register_order` | 注册顺序编号 |
-| `callback` | 异步 event callback |
+| `_register_order` | 内部注册顺序编号 |
+| `core_func` | 异步核心处理函数 |
+| `on_has_error` | 当前 handler 对前置错误的响应，可为 `None` |
+| `on_accepted` | 当前 handler 对已 accepted 事件的响应，可为 `None` |
+| `on_error` | 接收事件和当前 handler 自身的原始异常，可为 `None` |
 | `id` | 自动生成的 `handler-...` 标识 |
 | `subscribe` | 包含模式列表 |
 | `filter_event` | 排除模式列表 |
 | `priority` | 优先级；边界插入时为 `None` |
 | `between_handlers` | 注册时指定的相对位置 |
-| `stop_when_error` | 前台错误停止策略 |
-| `time_out` | handler timeout |
+| `stop_when_error` | 已有错误时是否跳过当前核心函数 |
+| `time_out` | 每个实际调用的回调的超时时间 |
 | `background` | 是否后台执行 |
 
-直接构造后可使用 `APIX_HANDLER_REGISTRY.register_handler(entry)` 注册。Registry 会再次验证模式、callback、priority 和边界，并更新受影响的精确事件链版本。
+构造函数只接收四个回调、`stop_when_error`、`time_out` 和 `background`；其余注册参数由全局 `subscribe()` 注入。底层 `register_handler(entry)` 要求 entry 已具备完整注册信息，负责验证模式、core_func、priority 和边界，并更新受影响的精确事件链版本。
 
 ### ApixHandlerRegistry
 

@@ -78,8 +78,11 @@ await EVENT_PIPE.join()
     "context": {"task_id": "task-1"},
     "timestamp": 1787414400.0,
     "accepted": False,
+    "error_stack": [],
 }
 ```
+
+`error_stack` 按顺序保存错误记录字典，每条包含 `handler_name`、`phase`、`exception_type`、`message` 和 traceback 文本。反序列化后恢复为 `ApixEventError`，因此下游仍可通过 `has_error` 判断前置错误。
 
 内部辅助函数位于 `apix.core.event.event_pipe`：
 

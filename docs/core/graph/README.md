@@ -390,6 +390,14 @@ async def observe_graph_dispatch(event: ApixEvent) -> None:
 
 图自身的 dispatch handler 使用默认优先级 `1`，因此更高优先级的插件 handler 会先执行。也可以使用 `between_handlers` 相对指定处理器插入。
 
+图内置 dispatch handler 同时注册了错误与 accepted 通知：
+
+- 前置前台插件抛出未捕获异常或超时：本次调用进入 `failed`，`invoke()` / `stream()` 抛出 `GraphNodeError`，其 `errors` 为前置 handler 的错误记录。
+- 前置插件调用 `event.accept()`：本次调用进入 `aborted`，按现有中止规则使用最新已保存快照结束；stream 会先产出已排队的 chunk。
+- 两种状态同时存在时，错误优先，已失败的 context 不会再次中止。
+- 后台插件的未捕获异常只写日志，不影响图的核心分发。
+- 图分发函数或 accepted 通知自身异常由 `on_error` 以原始异常结束调用，不依赖 `on_has_error`。
+
 这里需要注意：
 
 - `event.event_name` 表示 namespace 隔离后的**通用调度事件名**，不再表示具体节点。

@@ -131,12 +131,12 @@ class ApixEventHandler:
         the failed function. Cancellation propagates without calling on_error.
         Background failures still invoke on_error but never enter error_stack.
         """
+        if event.has_error and self.on_has_error is not None:
+            await self._execute_func(self.on_has_error, "on_has_error", event)
         if event.accepted:
             if self.on_accepted is not None:
                 await self._execute_func(self.on_accepted, "on_accepted", event)
             return
-        if event.has_error and self.on_has_error is not None:
-            await self._execute_func(self.on_has_error, "on_has_error", event)
         if event.has_error and self.stop_when_error:
             return
         await self._execute_func(self.core_func, "core_func", event)
