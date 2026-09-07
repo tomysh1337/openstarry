@@ -47,15 +47,15 @@ def make_entry(
     callback=None,
 ) -> ApixEventHandler:
     """Create one valid handler registry entry."""
-    return ApixEventHandler(
-        name=name,
-        register_order=0,
-        callback=AsyncMock() if callback is None else callback,
-        subscribe=["event.*"] if subscribe_patterns is None else subscribe_patterns,
-        filter_event=[] if filter_event is None else filter_event,
-        priority=priority,
-        between_handlers=between_handlers,
-    )
+    entry = ApixEventHandler(AsyncMock() if callback is None else callback)
+    entry.name = name
+    entry._register_order = 0
+    entry.subscribe = ["event.*"] if subscribe_patterns is None else subscribe_patterns
+    entry.filter_event = [] if filter_event is None else filter_event
+    entry.priority = priority
+    entry.between_handlers = between_handlers
+    return entry
+
 
 
 def observe_events(*event_names: str) -> None:
@@ -299,7 +299,7 @@ def test_register_rejects_invalid_entries_without_partial_mutation():
         APIX_HANDLER_REGISTRY.register_handler(object())
     with pytest.raises(ValueError, match="name"):
         APIX_HANDLER_REGISTRY.register_handler(make_entry(""))
-    with pytest.raises(TypeError, match="callback"):
+    with pytest.raises(TypeError, match="callable"):
         APIX_HANDLER_REGISTRY.register_handler(
             make_entry("no_callback", callback=False)
         )
@@ -471,7 +471,7 @@ def test_global_subscribe_builds_full_handler_metadata():
     assert entry.stop_when_error is False
     assert entry.time_out is None
     assert entry.background is True
-    assert entry.register_order == 0
+    assert entry._register_order == 0
     assert APIX_HANDLER_REGISTRY._register_order == 1
 
 
@@ -495,7 +495,7 @@ def test_global_subscribe_deduplicates_by_handler_name():
 
     replacement.__name__ = "handler"
     assert subscribe("event.two")(replacement) is replacement
-    assert APIX_HANDLER_REGISTRY.get_handler("handler").callback is handler
+    assert APIX_HANDLER_REGISTRY.get_handler("handler").core_func is handler
 
     with pytest.raises(EventHandlerAlreadyRegisteredError):
         subscribe("event.two", exist_ok=False)(replacement)
@@ -628,5 +628,5 @@ async def test_dispatch_skips_name_missing_from_registry():
         result = await event_loop._dispatch_event(event)
 
     assert result is event
-    assert event.accepted is True
+    assert event.accepted is False
     logger.warning.assert_called_once()

@@ -121,16 +121,18 @@ def handler_entry_factory():
 
             callback = default_handler
 
-        return ApixEventHandler(
-            id="handler_id_001",
-            name=name,
-            subscribe=list(subscribe or ["test.event"]),
-            callback=callback,
-            priority=priority,
-            register_order=register_order,
+        entry = ApixEventHandler(
+            callback,
             stop_when_error=stop_when_error,
             time_out=time_out,
             background=background,
         )
+        entry.id = "handler_id_001"
+        entry.name = name
+        entry.subscribe = list(subscribe or ["test.event"])
+        entry.priority = priority
+        entry._register_order = register_order
+        return entry
+
 
     return _make

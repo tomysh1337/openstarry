@@ -43,17 +43,19 @@ def _make_handler_entry(
     if callback is None:
         callback = AsyncMock()
 
-    return ApixEventHandler(
-        id=f"id_{name}",
-        name=name,
-        subscribe=list(subscribe or ["test.event"]),
-        callback=callback,
-        priority=priority,
-        register_order=register_order,
+    entry = ApixEventHandler(
+        callback,
         stop_when_error=stop_when_error,
         time_out=time_out,
         background=background,
     )
+    entry.id = f"id_{name}"
+    entry.name = name
+    entry.subscribe = list(subscribe or ["test.event"])
+    entry.priority = priority
+    entry._register_order = register_order
+    return entry
+
 
 
 def _make_event(event_name="test.event", accepted=False):
@@ -194,8 +196,7 @@ class TestDispatchEvent:
     async def test_dispatch_no_handlers_returns_event(self):
         """
         When no handlers are registered, event is returned as-is.
-        Note: the code returns early without calling event.accept()
-        when handlers list is empty (see _dispatch_event line 189-190).
+        Dispatch does not implicitly accept events.
         """
         registry = ApixHandlerRegistry()
         _reset_registry(registry)
@@ -204,7 +205,7 @@ class TestDispatchEvent:
         event = _make_event()
         result = await handler._dispatch_event(event)
         assert result is event
-        # Early return skips accept() - the event keeps its original accepted state
+        # Dispatch preserves the explicit acceptance state.
         assert result.accepted is False
 
     @pytest.mark.asyncio
@@ -222,7 +223,7 @@ class TestDispatchEvent:
         result = await handler._dispatch_event(event)
 
         mock_callback.assert_awaited_once_with(event)
-        assert result.accepted is True
+        assert result.accepted is False
 
     @pytest.mark.asyncio
     async def test_dispatch_multiple_handlers_called_in_order(self):
@@ -250,8 +251,8 @@ class TestDispatchEvent:
         assert call_order == ["h1", "h2"]
 
     @pytest.mark.asyncio
-    async def test_dispatch_event_accepted_stops_iteration(self):
-        """When event.accepted is True, remaining handlers are skipped."""
+    async def test_dispatch_event_accepted_skips_remaining_cores(self):
+        """When event.accepted is True, remaining core functions are skipped."""
         registry = ApixHandlerRegistry()
         _reset_registry(registry)
         handler = ApixEventLoop(registry)
@@ -276,8 +277,8 @@ class TestDispatchEvent:
         assert called == ["h1"]
 
     @pytest.mark.asyncio
-    async def test_dispatch_event_already_accepted_skips_all(self):
-        """If event is already accepted, no handlers are called."""
+    async def test_dispatch_event_already_accepted_skips_core(self):
+        """If event is already accepted, its core function is not called."""
         registry = ApixHandlerRegistry()
         _reset_registry(registry)
         handler = ApixEventLoop(registry)
@@ -307,7 +308,7 @@ class TestDispatchEvent:
 
         event = _make_event()
 
-        with patch("apix.core.event.event_loop.logger") as mock_logger:
+        with patch("apix.core.event.base.logger") as mock_logger:
             result = await handler._dispatch_event(event)
 
             error_calls = [
@@ -315,7 +316,7 @@ class TestDispatchEvent:
                 if "timeout" in str(c).lower()
             ]
             assert len(error_calls) >= 1
-            assert result.accepted is True
+            assert result.accepted is False
 
     @pytest.mark.asyncio
     async def test_dispatch_handler_exception_logs_error(self):
@@ -332,14 +333,14 @@ class TestDispatchEvent:
 
         event = _make_event()
 
-        with patch("apix.core.event.event_loop.logger") as mock_logger:
+        with patch("apix.core.event.base.logger") as mock_logger:
             result = await handler._dispatch_event(event)
-            assert result.accepted is True
+            assert result.accepted is False
             mock_logger.error.assert_called()
 
     @pytest.mark.asyncio
-    async def test_dispatch_handler_stop_when_error_true_breaks(self):
-        """stop_when_error=True should stop dispatching on handler error."""
+    async def test_dispatch_upstream_stop_flag_does_not_control_next_handler(self):
+        """The next handler uses its own stop_when_error setting."""
         registry = ApixHandlerRegistry()
         _reset_registry(registry)
         handler = ApixEventLoop(registry)
@@ -360,14 +361,14 @@ class TestDispatchEvent:
 
         event = _make_event()
 
-        with patch("apix.core.event.event_loop.logger"):
+        with patch("apix.core.event.base.logger"):
             await handler._dispatch_event(event)
 
-        assert called == ["h1"]
+        assert called == ["h1", "h2"]
 
     @pytest.mark.asyncio
     async def test_dispatch_handler_stop_when_error_false_continues(self):
-        """stop_when_error=False should continue dispatching after error."""
+        """A later handler with stop_when_error=False runs despite upstream errors."""
         registry = ApixHandlerRegistry()
         _reset_registry(registry)
         handler = ApixEventLoop(registry)
@@ -388,7 +389,7 @@ class TestDispatchEvent:
 
         event = _make_event()
 
-        with patch("apix.core.event.event_loop.logger"):
+        with patch("apix.core.event.base.logger"):
             await handler._dispatch_event(event)
 
         assert called == ["h1", "h2"]
@@ -409,7 +410,7 @@ class TestDispatchEvent:
         event = _make_event()
 
         result = await handler._dispatch_event(event)
-        assert result.accepted is True
+        assert result.accepted is False
 
         # Allow a short time for background task to complete
         await asyncio.sleep(0.05)
@@ -486,7 +487,7 @@ class TestRunBackgroundHandler:
         entry = _make_handler_entry(callback=slow_handler, time_out=0.001)
         event = _make_event()
 
-        with patch("apix.core.event.event_loop.logger") as mock_logger:
+        with patch("apix.core.event.base.logger") as mock_logger:
             await handler._run_background_handler(entry, event)
             mock_logger.error.assert_called()
 
@@ -519,7 +520,7 @@ class TestRunBackgroundHandler:
         entry = _make_handler_entry(callback=error_handler)
         event = _make_event()
 
-        with patch("apix.core.event.event_loop.logger") as mock_logger:
+        with patch("apix.core.event.base.logger") as mock_logger:
             await handler._run_background_handler(entry, event)
             mock_logger.error.assert_called()
 
@@ -582,7 +583,7 @@ class TestEventConsumerLoop:
 
     @pytest.mark.asyncio
     async def test_consumer_dispatch_flow(self):
-        """End-to-end: event -> dispatch -> handler called -> accepted."""
+        """End-to-end: event -> dispatch -> handler called without implicit acceptance."""
         registry = ApixHandlerRegistry()
         _reset_registry(registry)
         handler = ApixEventLoop(registry)
@@ -595,7 +596,7 @@ class TestEventConsumerLoop:
         result = await handler._dispatch_event(event)
 
         assert result is not None
-        assert result.accepted
+        assert not result.accepted
         mock_callback.assert_awaited_once_with(event)
 
     @pytest.mark.asyncio

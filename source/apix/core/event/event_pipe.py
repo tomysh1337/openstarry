@@ -44,7 +44,7 @@ from apix.config.base_config import (
     REMOTE_GATEWAY_ENABLE,
     REMOTE_GATEWAY_PIPE_ENDPOINT,
 )
-from apix.core.event.base import ApixEvent, ChannelType, EventType
+from apix.core.event.base import ApixEvent, ApixEventError, ChannelType, EventType
 from apix.core.event.event_registry import APIX_EVENT_REGISTRY
 from apix.core.event.handler_registry import APIX_HANDLER_REGISTRY
 
@@ -63,6 +63,7 @@ def event_to_payload(event: ApixEvent) -> dict[str, Any]:
         "context": event.context,
         "timestamp": event.timestamp,
         "accepted": event.accepted,
+        "error_stack": [asdict(error) for error in event.error_stack],
     }
 
 
@@ -97,6 +98,7 @@ def event_from_payload(payload: Any) -> ApixEvent:
         context=payload.get("context"),
         timestamp=float(payload["timestamp"]),
         accepted=bool(payload.get("accepted", False)),
+        error_stack=[ApixEventError(**error) for error in payload.get("error_stack", [])],
     )
 
 

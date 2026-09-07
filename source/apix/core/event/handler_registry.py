@@ -225,8 +225,10 @@ class ApixHandlerRegistry:
             raise EventHandlerAlreadyRegisteredError(
                 f"Handler `{handler_entry.name}` already registered."
             )
-        if not callable(handler_entry.callback):
-            raise TypeError("Handler callback must be callable.")
+        if not callable(handler_entry.core_func):
+            raise TypeError("Handler core_func must be callable.")
+        
+        handler_entry._register_order = APIX_HANDLER_REGISTRY._register_order
 
         handler_entry.subscribe = self._normalise_patterns(
             handler_entry.subscribe,
@@ -286,6 +288,7 @@ class ApixHandlerRegistry:
         bucket = self.priority_buckets.setdefault(bucket_priority, [])
         bucket.insert(insert_index, handler_entry.name)
         self._invalidate_matching_chains(handler_entry)
+        APIX_HANDLER_REGISTRY._register_order += 1
 
         logger.debug(
             f"Registered handler {handler_entry.name}, "
@@ -414,7 +417,7 @@ def subscribe(
     """Register an async handler for one or more event-name patterns.
 
     Handler names are unique across the process-global registry. The decorated
-    function itself is returned unchanged.
+    function or ApixEventHandler instance is returned unchanged.
 
     Event subscription and filtering use case-sensitive
     :func:`fnmatch.fnmatchcase` semantics. The handler chain is resolved lazily
@@ -550,14 +553,15 @@ def subscribe(
             ``"graph.internal.snapshot"``.
 
         stop_when_error:
-            If ``True``, synchronous dispatch of later handlers stops when this
-            handler raises an exception. If ``False``, dispatch continues with
-            the next handler. Background-handler failures never interrupt the
-            foreground handler chain.
+            If ``True``, skip this handler's core function when the event has
+            upstream errors. Error notifications still run. If ``False``, the
+            core may run after notification unless the event is accepted.
+            Background-handler failures are logged without changing event errors.
 
         time_out:
-            Maximum execution time in seconds. ``None`` waits indefinitely.
-            Values less than or equal to zero are normalized to ``None``.
+            Maximum execution time in seconds for each invoked core or
+            notification function. ``None`` waits indefinitely. Values less
+            than or equal to zero are normalized to ``None``.
 
         background:
             If ``True``, schedule the handler as a background task without
@@ -573,8 +577,10 @@ def subscribe(
            the local queue. Later registration or unregistration does not
            change the chain used by an already published event.
         6. Events with different exact names may dispatch concurrently.
-        7. Calling :meth:`ApixEvent.accept` skips handlers that have not yet
-           been dispatched.
+        7. Calling :meth:`ApixEvent.accept` skips subsequent core functions,
+           while applicable error and acceptance notifications still run.
+        8. Options supplied here, including defaults, override an existing
+           ApixEventHandler's settings. Notification functions are preserved.
 
     Examples:
         Register handlers by priority::
@@ -597,8 +603,8 @@ def subscribe(
                 ...
 
     Returns:
-        A decorator that returns the supplied handler function unchanged after
-        successful registration or an ``exist_ok`` duplicate.
+        A decorator that returns the supplied function or handler instance
+        unchanged after successful registration or an ``exist_ok`` duplicate.
 
     Raises:
         ValueError:
@@ -661,7 +667,9 @@ def subscribe(
     if time_out is not None and time_out <= 0:
         time_out = None
 
-    def decorator(func: EventHandlerFunc) -> EventHandlerFunc:
+    def decorator[HandlerT: EventHandlerFunc | ApixEventHandler](
+        func: HandlerT,
+    ) -> HandlerT:
         handler_name = func.__name__
         if handler_name in APIX_HANDLER_REGISTRY.registry:
             if exist_ok:
@@ -670,21 +678,17 @@ def subscribe(
                 f"Handler `{handler_name}` already registered."
             )
 
-        register_order = APIX_HANDLER_REGISTRY._register_order
-        entry = ApixEventHandler(
-            name=handler_name,
-            register_order=register_order,
-            callback=func,
-            subscribe=normalised_event_names.copy(),
-            filter_event=normalised_filters.copy(),
-            priority=priority,
-            between_handlers=between_handlers,
-            stop_when_error=stop_when_error,
-            time_out=time_out,
-            background=background,
-        )
+        entry = func if isinstance(func, ApixEventHandler) else ApixEventHandler(func)
+        entry.name = handler_name
+        entry.subscribe = normalised_event_names.copy()
+        entry.filter_event = normalised_filters.copy()
+        entry.priority = priority
+        entry.between_handlers = between_handlers
+        # Decorator options, including defaults, override instance settings.
+        entry.stop_when_error = stop_when_error if stop_when_error is not None else entry.stop_when_error
+        entry.time_out = time_out if time_out is not None else entry.time_out
+        entry.background = background if background is not None else entry.background
         APIX_HANDLER_REGISTRY.register_handler(entry)
-        APIX_HANDLER_REGISTRY._register_order += 1
         return func
 
     return decorator
@@ -704,14 +708,22 @@ def unsubscribe(
             raise
 
 
+def get_handler(
+    handler_name: str,
+) -> dict | None:
+    return APIX_HANDLER_REGISTRY.get_handler(handler_name)
+
+
 def get_handler_meta(
     handler_name: str,
 ) -> dict | None:
     handler = APIX_HANDLER_REGISTRY.get_handler(handler_name)
+    if handler is None:
+        return None
     return {
         'id': handler.id,
         'name': handler.name,
-        'register_order': handler.register_order,
+        'register_order': handler._register_order,
         'subscribe': handler.subscribe,
         'filter_event': handler.filter_event,
         'priority': handler.priority,

@@ -9,13 +9,6 @@ async def _handler(event):
 
 def test_handler_entry_defaults_to_infinite_wait():
     """A directly constructed handler also defaults to no timeout."""
-    entry = ApixEventHandler(
-        id="handler-id",
-        name="handler",
-        subscribe=["event"],
-        callback=_handler,
-        priority=1,
-        register_order=0,
-    )
+    entry = ApixEventHandler(_handler)
 
     assert entry.time_out is None

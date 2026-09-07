@@ -10,11 +10,13 @@ from typing import Any
 from apix.core.event import (
     EVENT_PIPE,
     ApixEvent,
+    ApixEventHandler,
     EventType,
     APIX_EVENT_LOOP,
     delete_handler_from_registry,
     subscribe,
 )
+from apix.core.utils.exception import GraphNodeError
 from apix.core.graph.base import (
     END,
     GRAPH_DISPATCH,
@@ -115,6 +117,27 @@ class NodeGraph:
             else:
                 await self._execute_node(target_node_name, context)
 
+        async def on_dispatch_failure(event: ApixEvent, error: Exception) -> None:
+            """Complete an invocation after this handler's own dispatch failure."""
+            context: GraphContext = event.context
+            if self._is_active_context(context):
+                self._fail(context, error)
+
+        async def on_dispatch_error(event: ApixEvent) -> None:
+            """Fail the invocation when a preceding event handler failed."""
+            context: GraphContext = event.context
+            if self._is_active_context(context):
+                self._fail(context, GraphNodeError(
+                    "Graph dispatch failed in a preceding event handler",
+                    errors=list(event.error_stack),
+                ))
+
+        async def on_dispatch_accepted(event: ApixEvent) -> None:
+            """Abort an invocation whose dispatch was accepted upstream."""
+            context: GraphContext = event.context
+            if self._is_active_context(context):
+                context.abort()
+
         dispatch_node.__name__ = _get_node_listener_name(
             GRAPH_DISPATCH,
             self._listener_namespace,
@@ -123,7 +146,12 @@ class NodeGraph:
             subscribe(
                 self._dispatch_event_name,
                 exist_ok=False,
-            )(dispatch_node)
+            )(ApixEventHandler(
+                dispatch_node,
+                on_accepted=on_dispatch_accepted,
+                on_has_error=on_dispatch_error,
+                on_error=on_dispatch_failure,
+            ))
             self._listener_handler_names.append(dispatch_node.__name__)
         except BaseException:
             self._unregister_node_listeners()

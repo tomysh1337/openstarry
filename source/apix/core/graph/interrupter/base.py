@@ -37,6 +37,11 @@ class Block:
 
         self._future.set_result(result)
 
+    def fail(self, error: Exception) -> None:
+        """Unblock the waiting node by raising an interruption failure."""
+        if not self._future.done():
+            self._future.set_exception(error)
+
     def cancel(self) -> None:
         """Cancel the block and abort its current graph invocation."""
         self._future.cancel()

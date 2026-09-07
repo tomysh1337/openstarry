@@ -108,8 +108,10 @@ async def test_interrupted_hook_rejects_non_block_event_context():
             timestamp=time.time(),
         )
 
-        with pytest.raises(TypeError, match="must carry a Block"):
-            await handler.callback(event)
+        await handler.execute(event)
+        [error] = event.error_stack
+        assert error.exception_type == "TypeError"
+        assert "must carry a Block" in error.message
         assert received == []
     finally:
         delete_handler_from_registry(invalid_context_hook.__name__)
@@ -274,3 +276,22 @@ async def test_node_timeout_is_not_swallowed_by_interrupt_cancellation():
     ):
         await asyncio.wait_for(invocation, timeout=1)
     assert block.cancelled is True
+
+
+async def test_block_fail_propagates_exception_and_preserves_first_completion():
+    """Failure completes a pending block once and retains the original error."""
+    loop = asyncio.get_running_loop()
+    block = Block("run", "block", "", None, loop.create_future())
+    error = ValueError("interruption failed")
+    block.fail(error)
+    block.fail(RuntimeError("later error"))
+    block.resolve("late result")
+    with pytest.raises(ValueError) as raised:
+        await block
+    assert raised.value is error
+    assert block.done and not block.cancelled
+
+    resolved = Block("run", "resolved", "", None, loop.create_future())
+    resolved.resolve("first result")
+    resolved.fail(error)
+    assert await resolved == "first result"

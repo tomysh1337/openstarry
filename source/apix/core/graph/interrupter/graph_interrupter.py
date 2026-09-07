@@ -9,11 +9,13 @@ from apix.core.graph.context.manager import get_graph_context
 from apix.core.graph.context.graph_context import GraphContext
 from apix.core.event import (
     ApixEvent,
+    ApixEventHandler,
     EVENT_PIPE,
     EventType,
     subscribe,
 )
 from apix.core.graph.interrupter.base import Block
+from apix.core.utils.exception import GraphNodeError
 
 
 InterruptedHandler = Callable[[Block], Awaitable[None]]
@@ -78,9 +80,16 @@ async def interrupt(
     try:
         if timeout is None:
             return await block
-        return await asyncio.wait_for(block, timeout)
-    except TimeoutError:
-        return None
+        timeout_scope = asyncio.timeout(timeout)
+        try:
+            async with timeout_scope:
+                return await block
+        except TimeoutError:
+            # A hook may fail the block with TimeoutError itself. Only this
+            # interruption's own deadline is converted into a None result.
+            if not timeout_scope.expired():
+                raise
+            return None
     except asyncio.CancelledError:
         # External ``Block.cancel()`` aborts the owning graph attempt at its
         # last committed snapshot. The CancelledError is then re-raised to
@@ -126,10 +135,36 @@ def interrupted_hook(
                 )
             await func(block)
 
+        async def on_failure(event: ApixEvent, error: Exception) -> None:
+            """Deliver this handler's own failure to its waiting node."""
+            block = event.context
+            if isinstance(block, Block):
+                block.fail(error)
+
+        async def on_has_error(event: ApixEvent) -> None:
+            """Deliver upstream failures to the node awaiting this block."""
+            block = event.context
+            if isinstance(block, Block):
+                block.fail(GraphNodeError(
+                    "Graph interruption failed in a preceding event handler",
+                    errors=list(event.error_stack),
+                ))
+
+        async def on_accepted(event: ApixEvent) -> None:
+            """Cancel an unhandled block when its event is accepted upstream."""
+            block = event.context
+            if isinstance(block, Block) and not block.done:
+                block.cancel()
+
         subscribe(
             event_name,
             exist_ok=exist_ok,
-        )(dispatch_block)
+        )(ApixEventHandler(
+            dispatch_block,
+            on_accepted=on_accepted,
+            on_has_error=on_has_error,
+            on_error=on_failure,
+        ))
         return func
 
     return decorator

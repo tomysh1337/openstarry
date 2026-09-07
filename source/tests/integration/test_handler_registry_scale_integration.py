@@ -32,14 +32,14 @@ def _make_handler(
     callback: Callable | None = None,
 ) -> ApixEventHandler:
     """Build one handler entry for an integration-test registry."""
-    return ApixEventHandler(
-        name=name,
-        register_order=0,
-        callback=_noop_handler if callback is None else callback,
-        subscribe=subscribe,
-        filter_event=[] if filter_event is None else filter_event,
-        priority=priority,
-    )
+    entry = ApixEventHandler(_noop_handler if callback is None else callback)
+    entry.name = name
+    entry._register_order = 0
+    entry.subscribe = subscribe
+    entry.filter_event = [] if filter_event is None else filter_event
+    entry.priority = priority
+    return entry
+
 
 
 def _observe_event(event_name: str, event_index: int) -> None:
@@ -315,7 +315,7 @@ async def test_two_thousand_four_hundred_events_dispatch_through_glob_handlers()
             pipe.task_done()
 
             assert result is event
-            assert event.accepted is True
+            assert event.accepted is False
             assert event.context == expected_trace
             dispatched += 1
 

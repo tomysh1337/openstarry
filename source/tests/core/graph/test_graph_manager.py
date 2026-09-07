@@ -259,7 +259,7 @@ def test_compile_exist_ok_decomposes_and_replaces_original_graph():
         .compile_graph(using_namespace="replaceable")
     )
     first_callbacks = {
-        APIX_HANDLER_REGISTRY.get_handler(handler_name).callback
+        APIX_HANDLER_REGISTRY.get_handler(handler_name).core_func
         for handler_name in APIX_HANDLER_REGISTRY.get_handlers_chain_for_event(
             first_graph._dispatch_event_name
         )
@@ -275,7 +275,7 @@ def test_compile_exist_ok_decomposes_and_replaces_original_graph():
         )
     )
     replacement_callbacks = {
-        APIX_HANDLER_REGISTRY.get_handler(handler_name).callback
+        APIX_HANDLER_REGISTRY.get_handler(handler_name).core_func
         for handler_name in APIX_HANDLER_REGISTRY.get_handlers_chain_for_event(
             replacement._dispatch_event_name
         )

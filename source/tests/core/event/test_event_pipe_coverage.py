@@ -634,17 +634,11 @@ class TestEventLoopRemainingBranches:
         callback = AsyncMock()
         from apix.core.event.base import ApixEventHandler
 
-        registry.register_handler(
-            ApixEventHandler(
-                id="handler-1",
-                name="handler",
-                subscribe=["test.event"],
-                callback=callback,
-                priority=1,
-                register_order=0,
-                time_out=None,
-            )
-        )
+        entry = ApixEventHandler(callback)
+        entry.name = "handler"
+        entry.subscribe = ["test.event"]
+        entry.priority = 1
+        registry.register_handler(entry)
         event = make_event()
         await handler._dispatch_event(event)
         callback.assert_awaited_once_with(event)

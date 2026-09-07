@@ -1,4 +1,4 @@
-from apix.core.event.base import EventType, ApixEvent, EventHandlerFunc, ApixEventHandler, ChannelType
+from apix.core.event.base import EventType, ApixEvent, ApixEventError, EventHandlerFunc, EventHandlerErrorFunc, ApixEventHandler, ChannelType
 from apix.core.event.event_loop import APIX_EVENT_LOOP, ApixEventLoop
 from apix.core.event.event_pipe import (
     EVENT_PIPE,
@@ -26,7 +26,7 @@ from apix.core.event.event_registry import (
 
 
 __all__ = [
-    "EventType", "ApixEvent", "EventHandlerFunc", "ApixEventHandler", "ChannelType",
+    "EventType", "ApixEvent", "ApixEventError", "EventHandlerFunc", "EventHandlerErrorFunc", "ApixEventHandler", "ChannelType",
     "APIX_EVENT_LOOP", "ApixEventLoop",
     "EVENT_PIPE", "ApixEventPipe", "BaseEventChannel", "BuiltinChannel",
     "GatewayChannel", "KafkaChannel", "RabbitMQChannel",

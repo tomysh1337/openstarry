@@ -26,10 +26,10 @@ class ApixEventLoop:
         self._event_consumer_task: asyncio.Task | None = None
 
         self._dispatch_tasks: set[asyncio.Task] = set()
-        self._dispatch_semaphore = asyncio.Semaphore(100) # back pressure
+        self._dispatch_semaphore = asyncio.Semaphore(1000) # back pressure
 
         self._background_handler_tasks: set[asyncio.Task] = set()
-        self._background_handler_semaphore = asyncio.Semaphore(100)
+        self._background_handler_semaphore = asyncio.Semaphore(1000)
 
         self.started = False
 
@@ -146,7 +146,7 @@ class ApixEventLoop:
 
     def _create_background_handler_task(
         self,
-        handler,
+        handler: ApixEventHandler,
         event: ApixEvent,
     ):
         task = asyncio.create_task(
@@ -171,34 +171,8 @@ class ApixEventLoop:
         Execute background handler safely.
         """
 
-        try:
-            async with self._background_handler_semaphore:
-                if handler.time_out is None:
-                    await handler.callback(event)
-                else:
-                    await asyncio.wait_for(
-                        handler.callback(event),
-                        timeout=handler.time_out,
-                    )
-
-        except asyncio.TimeoutError:
-            logger.error(
-                f"Handler timeout: "
-                f"event={event.event_name}, "
-                f"handler={handler.callback.__name__}, "
-            )
-
-        except asyncio.CancelledError:
-            raise
-
-        except Exception as e:
-            logger.error(
-                f"Handler failed: "
-                f"event={event.event_name}, "
-                f"handler={handler.callback.__name__}, "
-                f"error={type(e).__name__}: {e}\n"
-                f"{traceback.format_exc()}"
-            )
+        async with self._background_handler_semaphore:
+            await handler.execute(event)
 
     async def _dispatch_event(
         self,
@@ -221,9 +195,6 @@ class ApixEventLoop:
                 return event
 
             for handler_name in handler_chain:
-                if event.accepted:
-                    break
-
                 # A permanently deleted entry cannot be resolved. This should
                 # only occur when callers delete a handler while an older event
                 # version is still queued.
@@ -235,44 +206,10 @@ class ApixEventLoop:
                     )
                     continue
 
-                try:
-                    if handler.background:
-                        self._create_background_handler_task(
-                            handler,
-                            event,
-                        )
-                    else:
-                        if handler.time_out is None:
-                            await handler.callback(event)
-                        else:
-                            await asyncio.wait_for(
-                                handler.callback(event),
-                                timeout=handler.time_out,
-                            )
-
-                    if event.accepted:
-                        break
-
-                except asyncio.TimeoutError:
-                    logger.error(
-                        f"Handler timeout: "
-                        f"event={event.event_name}, "
-                        f"handler={handler.callback.__name__}, "
-                    )
-
-                except Exception as e:
-                    logger.error(
-                        f"Handler failed: "
-                        f"event={event.event_name}, "
-                        f"handler={handler.callback.__name__}, "
-                        f"error={type(e).__name__}: {e}\n"
-                        f"{traceback.format_exc()}"
-                    )
-
-                    if handler.stop_when_error:
-                        break
-
-            event.accept()
+                if handler.background:
+                    self._create_background_handler_task(handler, event)
+                else:
+                    await handler.execute(event)
 
             return event
 
