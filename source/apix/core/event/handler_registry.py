@@ -291,7 +291,6 @@ class ApixHandlerRegistry:
         bucket = self.priority_buckets.setdefault(bucket_priority, [])
         bucket.insert(insert_index, handler_entry.name)
         self._invalidate_matching_chains(handler_entry)
-        handler_entry.enabled = True
         APIX_HANDLER_REGISTRY._register_order += 1
 
         logger.debug(
@@ -316,7 +315,6 @@ class ApixHandlerRegistry:
             raise EventHandlerNotRegisteredError(
                 f"Handler `{handler_name}` not registered."
             )
-        handler.enabled = False
 
         if event_names is not None:
             filters = self._normalise_patterns(
