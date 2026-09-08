@@ -49,6 +49,9 @@ class ApixHandlerRegistry:
         self._register_order = 0
         self._initialized = True
 
+    def __contains__(self, item):
+        return item in self.registry
+
     @staticmethod
     def _normalise_patterns(
         patterns: Iterable[str],
@@ -288,6 +291,7 @@ class ApixHandlerRegistry:
         bucket = self.priority_buckets.setdefault(bucket_priority, [])
         bucket.insert(insert_index, handler_entry.name)
         self._invalidate_matching_chains(handler_entry)
+        handler_entry.enabled = True
         APIX_HANDLER_REGISTRY._register_order += 1
 
         logger.debug(
@@ -312,6 +316,7 @@ class ApixHandlerRegistry:
             raise EventHandlerNotRegisteredError(
                 f"Handler `{handler_name}` not registered."
             )
+        handler.enabled = False
 
         if event_names is not None:
             filters = self._normalise_patterns(
@@ -732,6 +737,16 @@ def get_handler_meta(
         'time_out': handler.time_out,
         'background': handler.background,
     }
+
+
+def is_registered(
+    handler_name: str,
+) -> bool:
+    """Return if a handler is registered."""
+    return handler_name in APIX_HANDLER_REGISTRY
+
+
+
 
 
 def get_unmatched_subscriptions(handler_name: str) -> list[str]:

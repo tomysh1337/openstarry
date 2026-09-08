@@ -75,6 +75,23 @@ class ApixEventHandler:
     Registration metadata is assigned by :func:`subscribe`.
     """
 
+    id: str
+    name: str
+    subscribe: list[str]
+    filter_event: list[str]
+    core_func: EventHandlerFunc
+    on_accepted: EventHandlerFunc
+    on_has_error: EventHandlerFunc
+    on_error: EventHandlerErrorFunc
+    stop_when_error: bool
+    time_out: float | None
+    background: bool
+    priority: float | None
+    between_handlers: tuple[str | None, str | None] | None
+    _register_order: float
+
+    enabled: bool
+
     def __init__(
         self,
         core_func: EventHandlerFunc,
@@ -105,6 +122,7 @@ class ApixEventHandler:
         self.filter_event: list[str] = []
         self.priority: float | None = None
         self.between_handlers: tuple[str | None, str | None] | None = None
+        self.enabled = False
 
     @property
     def __name__(self) -> str:
@@ -206,6 +224,10 @@ class ApixEventHandler:
         if self.on_error is not None and not exist_ok:
             raise ValueError("on_error already set.")
         self.on_error = callback
+
+    @property
+    def is_enabled(self) -> bool:
+        return self.enabled
 
 
 ChannelType = Literal["builtin", "mailbox", "mailtruck"]
