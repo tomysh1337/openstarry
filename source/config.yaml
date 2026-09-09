@@ -32,6 +32,8 @@ PIPELINE:
   event_pipe_max_len: 1024
   event_handler_default_time_out: 300
   message_pipe_max_len: 4096
+  event_loop_back_pressure: 4096
+  
 
 # A remote node consumes exactly one external mailbox implementation. This
 # section is ignored while REMOTE_GATEWAY is disabled.

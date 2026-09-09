@@ -744,9 +744,6 @@ def is_registered(
     return handler_name in APIX_HANDLER_REGISTRY
 
 
-
-
-
 def get_unmatched_subscriptions(handler_name: str) -> list[str]:
     """Return global handler patterns that matched no observed event name."""
     return APIX_HANDLER_REGISTRY.get_unmatched_subscriptions(handler_name)
@@ -776,6 +773,7 @@ __all__ = [
     "get_unmatched_subscriptions",
     "subscribe",
     "unsubscribe",
-    "get_handler"
-    "get_handler_meta"
+    "get_handler",
+    "get_handler_meta",
+    "is_registered",
 ]
