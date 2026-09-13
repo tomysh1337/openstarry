@@ -24,7 +24,7 @@ def auto_load(app: FastAPI):
             obj = getattr(module, attr)
             if isinstance(obj, APIRouter):
                 app.include_router(obj)
-                print(f"✔ Router register: {full_name}.{attr}")
+                print(f"[OK] Router register: {full_name}.{attr}")
 
 async def lifespan(app: FastAPI):
     auto_load(app)
@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
     await _close_server_()
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="APIX AGENT MEMORY CALL MODULE", version="1.0.0", lifespan=lifespan)
+    app = FastAPI(title="OpenStarry AGENT MEMORY CALL MODULE", version="1.0.0", lifespan=lifespan)
     return app
 
 

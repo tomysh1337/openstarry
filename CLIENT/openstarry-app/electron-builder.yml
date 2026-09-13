@@ -1,0 +1,121 @@
+appId: com.tomysh.openstarry-nextgen
+productName: OpenStarry NextGen
+directories:
+  buildResources: resources
+icon: resources/OpenStarry.ico
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!vendor/**'
+asar: true
+compression: maximum
+asarUnpack:
+  - resources/**
+  - node_modules/@oai/cua/bin/**
+  - node_modules/@oai/sky/bin/**
+extraResources:
+  - from: resources/OpenStarry.png
+    to: branding/OpenStarry.png
+  - from: vendor/runtime-tools/uv.exe
+    to: runtime/uv.exe
+  - from: vendor/computer-use/source/packages/@oai/sky
+    to: computer-use/node_modules/@oai/sky
+    filter:
+      - 'package.json'
+      - 'dist/**'
+      - 'bin/**'
+  - from: vendor/computer-use/source/packages/@oai/cua
+    to: computer-use/node_modules/@oai/cua
+    filter:
+      - 'package.json'
+      - 'dist/**'
+      - 'bin/**'
+  - from: node_modules/@statsig/js-client
+    to: computer-use/node_modules/@statsig/js-client
+    filter:
+      - 'package.json'
+      - 'src/**'
+  - from: node_modules/@statsig/client-core
+    to: computer-use/node_modules/@statsig/client-core
+    filter:
+      - 'package.json'
+      - 'src/**'
+  - from: ../../TASK/task_flow_module
+    to: backend/TASK
+    filter:
+      - '**/*'
+      - '!**/.venv/**'
+      - '!**/__pycache__/**'
+      - '!**/*.log'
+  - from: ../../AGENT/agent_module
+    to: backend/AGENT
+    filter:
+      - '**/*'
+      - '!**/.venv/**'
+      - '!**/__pycache__/**'
+      - '!**/*.log'
+      - '!OpenStarry_running_time/**'
+  - from: ../../MEMORY/memory_module
+    to: backend/MEMORY
+    filter:
+      - '**/*'
+      - '!**/.venv/**'
+      - '!**/__pycache__/**'
+      - '!**/*.log'
+      - '!data/**'
+      - '!.VSCodeCounter/**'
+  - from: ../../FILE/file_service
+    to: backend/FILE
+    filter:
+      - '**/*'
+      - '!**/.venv/**'
+      - '!**/__pycache__/**'
+      - '!**/*.log'
+      - '!data/**'
+win:
+  executableName: OpenStarry-NextGen
+  icon: resources/OpenStarry.ico
+  target:
+    - nsis
+    - portable
+nsis:
+  artifactName: OpenStarry-NextGen-${version}-Setup.${ext}
+  installerIcon: resources/OpenStarry.ico
+  uninstallerIcon: resources/OpenStarry.ico
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+  perMachine: false
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  include: resources/installer.nsh
+portable:
+  artifactName: OpenStarry-NextGen-${version}-Portable.${ext}
+mac:
+  extendInfo:
+    - NSCameraUsageDescription: Application requests access to the device's camera.
+    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+  notarize: false
+dmg:
+  artifactName: ${name}-${version}.${ext}
+linux:
+  target:
+    - AppImage
+    - snap
+    - deb
+  maintainer: electronjs.org
+  category: Utility
+appImage:
+  artifactName: ${name}-${version}.${ext}
+npmRebuild: false
+publish:
+  provider: github
+  owner: tomysh1337
+  repo: openstarry
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/

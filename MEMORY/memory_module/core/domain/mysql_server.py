@@ -1,5 +1,8 @@
 import asyncio
+import os
 import re
+import sqlite3
+from pathlib import Path
 from ulid import ulid
 import inspect
 import json
@@ -22,6 +25,7 @@ class MysqlService:
 
     def __init__(self, *, host, port, user, password, database, charset="utf8mb4"):
         self._pool = None
+        self._sqlite_conn = None
         self._pool_args = dict(
             host=host,
             port=port,
@@ -37,8 +41,85 @@ class MysqlService:
     async def init(self):
         """Initialize MySQL connection pool."""
         async with self._pool_lock:
+            if os.environ.get("OPENSTARRY_INTEGRATED") == "1":
+                self._init_sqlite()
+                return
             if not self._pool:
-                self._pool = await aiomysql.create_pool(**self._pool_args)
+                try:
+                    self._pool = await aiomysql.create_pool(**self._pool_args)
+                except Exception as exc:
+                    self._init_sqlite()
+                    logger.warning(f"[MysqlService] MySQL unavailable ({type(exc).__name__}); using local SQLite")
+
+    def _init_sqlite(self):
+        if self._sqlite_conn:
+            return
+        data_root = Path(os.environ.get("OPENSTARRY_DATA_DIR", Path(__file__).resolve().parents[2] / "data"))
+        data_root.mkdir(parents=True, exist_ok=True)
+        self._sqlite_conn = sqlite3.connect(data_root / "memory.sqlite3", check_same_thread=False)
+        self._sqlite_conn.row_factory = sqlite3.Row
+        self._sqlite_conn.execute("PRAGMA journal_mode=WAL")
+        self._sqlite_conn.execute("PRAGMA synchronous=NORMAL")
+        self._sqlite_conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+              user_uid TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS conversations (
+              id INTEGER PRIMARY KEY AUTOINCREMENT, user_uid TEXT NOT NULL, platform TEXT NOT NULL DEFAULT 'default',
+              conversation_uid TEXT NOT NULL UNIQUE, title TEXT NOT NULL DEFAULT '新的聊天...',
+              work_space TEXT DEFAULT '', last_active_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              latest_cursor INTEGER NOT NULL DEFAULT 0, latest_timestamp INTEGER NOT NULL DEFAULT 0,
+              has_new_message INTEGER NOT NULL DEFAULT 0, is_pinned INTEGER NOT NULL DEFAULT 0,
+              is_cron INTEGER NOT NULL DEFAULT 0, is_deleted INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_conversation_user ON conversations(user_uid,is_deleted,is_pinned,last_active_at);
+            CREATE TABLE IF NOT EXISTS messages (
+              id INTEGER PRIMARY KEY AUTOINCREMENT, user_uid TEXT NOT NULL, conversation_id INTEGER NOT NULL,
+              conversation_uid TEXT NOT NULL, generation_id TEXT NOT NULL DEFAULT '', node_id TEXT NOT NULL DEFAULT '',
+              parent_id TEXT NOT NULL DEFAULT '', role TEXT NOT NULL, content TEXT, think TEXT,
+              extra TEXT, info TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              msg_cursor INTEGER NOT NULL, msg_timestamp INTEGER NOT NULL DEFAULT 0,
+              is_deleted INTEGER NOT NULL DEFAULT 0, UNIQUE(conversation_id,msg_cursor)
+            );
+            CREATE INDEX IF NOT EXISTS idx_message_conversation ON messages(user_uid,conversation_uid,msg_cursor);
+            CREATE INDEX IF NOT EXISTS idx_message_node ON messages(conversation_id,node_id);
+            CREATE TABLE IF NOT EXISTS shortterm_memory (
+              memory_id TEXT PRIMARY KEY, user_uid TEXT NOT NULL, conversation_uid TEXT NOT NULL,
+              content TEXT NOT NULL, created_timestamp INTEGER NOT NULL, is_deleted INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS memo_files (
+              file_id TEXT PRIMARY KEY, file_name TEXT NOT NULL, file_path TEXT NOT NULL, mime_type TEXT,
+              user_uid TEXT NOT NULL, conversation_uid TEXT, deleted INTEGER NOT NULL DEFAULT 0,
+              upload_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, deleted_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS llm_provider (
+              provider_id TEXT PRIMARY KEY, user_uid TEXT NOT NULL, provider_name TEXT NOT NULL,
+              type TEXT NOT NULL DEFAULT 'openai', endpoint TEXT NOT NULL, model_list TEXT NOT NULL DEFAULT '[]',
+              description TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, is_deleted INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS mcp_server (
+              mcp_id TEXT PRIMARY KEY, user_uid TEXT NOT NULL, mcp_name TEXT NOT NULL, transport TEXT NOT NULL,
+              endpoint TEXT, config TEXT NOT NULL DEFAULT '{}', description TEXT, tool_count INTEGER NOT NULL DEFAULT 0,
+              enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              is_deleted INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS cron_task (
+              task_id TEXT PRIMARY KEY, user_uid TEXT NOT NULL, conversation_uid TEXT, platform TEXT DEFAULT 'default',
+              name TEXT, prompt TEXT, execute TEXT, exec_time TEXT, repeat TEXT DEFAULT 'once',
+              extra_config TEXT, description TEXT, enabled INTEGER NOT NULL DEFAULT 1,
+              is_deleted INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+        self._sqlite_conn.execute(
+            "INSERT OR IGNORE INTO users(user_uid,username,password) VALUES (?,?,?)",
+            ("local-user", "本地用户", ""),
+        )
+        self._sqlite_conn.commit()
 
     async def _close(self):
         """Close MySQL connection pool."""
@@ -47,6 +128,9 @@ class MysqlService:
                 self._pool.close()
                 await self._pool.wait_closed()
                 self._pool = None
+            if self._sqlite_conn:
+                self._sqlite_conn.close()
+                self._sqlite_conn = None
 
     def _conversation_id_generator(self) -> str:
         """
@@ -63,6 +147,8 @@ class MysqlService:
         All result sets are fully consumed to keep connection clean.
         """
         logger.info(f"[MysqlService][_call_procedure] enter.")
+        if self._sqlite_conn:
+            return self._call_sqlite_procedure(proc_name, params or ())
         if not self._pool:
             raise RuntimeError("[MysqlService][_call_procedure] MySQL pool is not initialized, call init() first")
         async with self._pool.acquire() as conn:
@@ -86,6 +172,285 @@ class MysqlService:
                         break
                 index = min(len(results), 2) # Ignore Message OK at the fetchall's tail.
                 return jsonable_encoder(results[-index]) if results else []
+
+    def _sqlite_rows(self, query, params=()):
+        rows = [dict(row) for row in self._sqlite_conn.execute(query, params).fetchall()]
+        for row in rows:
+            for key in ("extra", "info", "model_list", "config", "extra_config"):
+                if row.get(key):
+                    try:
+                        row[key] = json.loads(row[key])
+                    except (TypeError, json.JSONDecodeError):
+                        pass
+            for key in ("is_pinned", "has_new_message", "is_cron", "is_deleted", "enabled"):
+                if key in row:
+                    row[key] = bool(row[key])
+        return rows
+
+    def _sqlite_execute(self, query, params=()):
+        cursor = self._sqlite_conn.execute(query, params)
+        self._sqlite_conn.commit()
+        return cursor
+
+    def _sqlite_update_optional(self, table, key_name, key_value, owner_name, owner_value, values):
+        updates = [(name, value) for name, value in values.items() if value is not None]
+        if not updates:
+            return
+        assignments = ", ".join(f"{name}=?" for name, _ in updates)
+        params = [value for _, value in updates]
+        params.extend([key_value, owner_value])
+        self._sqlite_execute(
+            f"UPDATE {table} SET {assignments} WHERE {key_name}=? AND {owner_name}=?",
+            params,
+        )
+
+    def _call_sqlite_procedure(self, proc_name, params):
+        if proc_name == "create_user":
+            self._sqlite_execute("INSERT INTO users(user_uid,username,password) VALUES (?,?,?)", params)
+            return []
+        if proc_name == "verify_user":
+            return self._sqlite_rows("SELECT user_uid,username FROM users WHERE username=? AND password=?", params)
+        if proc_name == "ensure_user_exists":
+            user_uid, username = params
+            if user_uid:
+                self._sqlite_execute(
+                    "INSERT OR IGNORE INTO users(user_uid,username,password) VALUES (?,?,?)",
+                    (user_uid, username or ("本地用户" if user_uid == "local-user" else user_uid), ""),
+                )
+            return self._sqlite_rows(
+                "SELECT user_uid,username FROM users WHERE user_uid=? OR (? IS NOT NULL AND username=?)",
+                (user_uid, username, username),
+            )
+        if proc_name == "create_conversation":
+            user_uid, platform, conversation_uid, title, workspace, is_cron = params
+            self._sqlite_execute(
+                """INSERT INTO conversations(user_uid,platform,conversation_uid,title,work_space,is_cron)
+                VALUES (?,?,?,?,?,?)""",
+                (user_uid, platform or "default", conversation_uid, title or "新的聊天...", workspace or "", int(bool(is_cron))),
+            )
+            return []
+        if proc_name == "update_conversation":
+            user_uid, conversation_uid, title, workspace, pinned, deleted, has_new = params
+            self._sqlite_update_optional(
+                "conversations", "conversation_uid", conversation_uid, "user_uid", user_uid,
+                {
+                    "title": title, "work_space": workspace,
+                    "is_pinned": None if pinned is None else int(bool(pinned)),
+                    "is_deleted": None if deleted is None else int(bool(deleted)),
+                    "has_new_message": None if has_new is None else int(bool(has_new)),
+                },
+            )
+            return []
+        if proc_name == "fetch_conversation_list":
+            return self._sqlite_rows(
+                """SELECT conversation_uid,title,work_space,last_active_at,created_at,latest_cursor,
+                is_pinned,has_new_message,is_cron FROM conversations
+                WHERE user_uid=? AND is_deleted=0 ORDER BY is_pinned DESC,last_active_at DESC""",
+                params,
+            )
+        if proc_name == "get_conversation_meta_by_id":
+            return self._sqlite_rows(
+                """SELECT conversation_uid,title,work_space,last_active_at,created_at,latest_cursor,
+                is_pinned,has_new_message FROM conversations WHERE conversation_uid=? AND is_deleted=0 LIMIT 1""",
+                params,
+            )
+        if proc_name == "append_message":
+            (
+                user_uid, conversation_uid, role, content, think, extra, info,
+                generation_id, node_id, parent_id, timestamp,
+            ) = params
+            conversation = self._sqlite_conn.execute(
+                "SELECT id,latest_cursor,latest_timestamp FROM conversations WHERE user_uid=? AND conversation_uid=? AND is_deleted=0",
+                (user_uid, conversation_uid),
+            ).fetchone()
+            if not conversation:
+                raise RuntimeError("Conversation not found or deleted")
+            cursor = int(conversation["latest_cursor"]) + 1
+            inserted = self._sqlite_conn.execute(
+                """INSERT INTO messages(user_uid,conversation_id,conversation_uid,role,content,think,extra,info,
+                msg_cursor,generation_id,node_id,parent_id,msg_timestamp)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    user_uid, conversation["id"], conversation_uid, role, content, think, extra, info,
+                    cursor, generation_id, node_id, parent_id, timestamp,
+                ),
+            )
+            self._sqlite_conn.execute(
+                """UPDATE conversations SET latest_cursor=?,latest_timestamp=?,last_active_at=CURRENT_TIMESTAMP,
+                has_new_message=? WHERE id=?""",
+                (cursor, max(int(conversation["latest_timestamp"] or 0), int(timestamp)), int(role != "human"), conversation["id"]),
+            )
+            self._sqlite_conn.commit()
+            created = self._sqlite_conn.execute("SELECT created_at FROM messages WHERE id=?", (inserted.lastrowid,)).fetchone()[0]
+            return [{"msg_id": inserted.lastrowid, "msg_cursor": cursor, "msg_timestamp": timestamp, "created_at": created}]
+        if proc_name == "delete_messages_node":
+            rows = self._sqlite_rows(
+                "SELECT info FROM messages WHERE user_uid=? AND conversation_uid=? AND node_id=?",
+                params,
+            )
+            self._sqlite_execute(
+                "UPDATE messages SET is_deleted=1 WHERE user_uid=? AND conversation_uid=? AND node_id=?",
+                params,
+            )
+            return rows
+        if proc_name == "fetch_messages_after_cursor":
+            return self._sqlite_rows(
+                """SELECT role,content,think,extra,info,msg_cursor,created_at,generation_id,node_id,parent_id,is_deleted
+                FROM messages WHERE user_uid=? AND conversation_uid=? AND msg_cursor>=?
+                ORDER BY msg_cursor ASC LIMIT ?""",
+                params,
+            )
+        if proc_name == "fetch_messages_for_user":
+            return self._sqlite_rows(
+                """SELECT role,content,think,extra,info,msg_cursor,generation_id,created_at
+                FROM messages WHERE user_uid=? AND conversation_uid=? AND role IN ('ai','human','info')
+                AND is_deleted=0 ORDER BY msg_cursor ASC""",
+                params,
+            )
+        if proc_name == "search_messages_by_keyword":
+            user_uid, keyword = params
+            return self._sqlite_rows(
+                """SELECT m.conversation_uid,m.generation_id,m.role,m.content,c.title,c.last_active_at
+                FROM messages m JOIN conversations c ON c.id=m.conversation_id
+                WHERE c.user_uid=? AND c.is_deleted=0 AND m.is_deleted=0 AND m.role IN ('human','ai')
+                AND m.content LIKE ? ORDER BY c.last_active_at DESC,m.id DESC LIMIT 300""",
+                (user_uid, f"%{keyword}%"),
+            )
+        if proc_name == "insert_file_info":
+            self._sqlite_execute(
+                """INSERT OR REPLACE INTO memo_files(file_id,file_name,file_path,mime_type,user_uid,conversation_uid)
+                VALUES (?,?,?,?,?,?)""",
+                params,
+            )
+            return []
+        if proc_name == "update_file_info":
+            file_id, user_uid, deleted = params
+            self._sqlite_execute(
+                """UPDATE memo_files SET deleted=?,deleted_at=CASE WHEN ?=1 THEN CURRENT_TIMESTAMP ELSE NULL END
+                WHERE file_id=? AND user_uid=?""",
+                (int(bool(deleted)), int(bool(deleted)), file_id, user_uid),
+            )
+            return []
+        if proc_name == "fetch_recent_files":
+            return self._sqlite_rows(
+                """SELECT file_id,file_name,file_path,mime_type,conversation_uid,upload_at
+                FROM memo_files WHERE user_uid=? AND deleted=0 ORDER BY upload_at DESC LIMIT ?""",
+                params,
+            )
+        if proc_name == "insert_shortterm_memory":
+            self._sqlite_execute(
+                """INSERT OR REPLACE INTO shortterm_memory(memory_id,user_uid,conversation_uid,content,created_timestamp,is_deleted)
+                VALUES (?,?,?,?,?,0)""",
+                params,
+            )
+            return []
+        if proc_name == "fetch_shortterm_memory":
+            return self._sqlite_rows(
+                """SELECT memory_id,content,created_timestamp FROM shortterm_memory
+                WHERE user_uid=? AND conversation_uid=? AND is_deleted=0 ORDER BY created_timestamp DESC LIMIT 1""",
+                params,
+            )
+        if proc_name == "delete_shortterm_memory":
+            memory_ids, user_uid, conversation_uid = params
+            ids = json.loads(memory_ids) if isinstance(memory_ids, str) else memory_ids
+            if not isinstance(ids, list):
+                ids = [ids]
+            for memory_id in ids:
+                self._sqlite_conn.execute(
+                    "UPDATE shortterm_memory SET is_deleted=1 WHERE memory_id=? AND user_uid=? AND conversation_uid=?",
+                    (memory_id, user_uid, conversation_uid),
+                )
+            self._sqlite_conn.commit()
+            return []
+        if proc_name == "create_llm_provider":
+            self._sqlite_execute(
+                """INSERT OR REPLACE INTO llm_provider
+                (provider_id,user_uid,provider_name,type,endpoint,model_list,description) VALUES (?,?,?,?,?,?,?)""",
+                params,
+            )
+            return []
+        if proc_name == "get_llm_providers":
+            return self._sqlite_rows(
+                """SELECT provider_id,provider_name,type,endpoint,model_list,description,created_at
+                FROM llm_provider WHERE user_uid=? AND is_deleted=0 ORDER BY created_at DESC""",
+                params,
+            )
+        if proc_name == "get_llm_provider_by_id":
+            return self._sqlite_rows(
+                """SELECT provider_id,provider_name,type,endpoint,model_list,description,created_at
+                FROM llm_provider WHERE provider_id=? AND is_deleted=0 LIMIT 1""",
+                params,
+            )
+        if proc_name == "update_llm_provider":
+            provider_id, user_uid, name, provider_type, endpoint, models, description, deleted = params
+            self._sqlite_update_optional(
+                "llm_provider", "provider_id", provider_id, "user_uid", user_uid,
+                {
+                    "provider_name": name, "type": provider_type, "endpoint": endpoint,
+                    "model_list": models, "description": description,
+                    "is_deleted": None if deleted is None else int(bool(deleted)),
+                },
+            )
+            return []
+        if proc_name == "create_mcp_server":
+            self._sqlite_execute(
+                """INSERT OR REPLACE INTO mcp_server
+                (mcp_id,user_uid,mcp_name,transport,endpoint,config,description) VALUES (?,?,?,?,?,?,?)""",
+                params,
+            )
+            return []
+        if proc_name in ("get_mcp_servers", "get_enabled_mcp_servers"):
+            where = "user_uid=? AND is_deleted=0" + (" AND enabled=1" if proc_name == "get_enabled_mcp_servers" else "")
+            fields = "mcp_id,mcp_name,transport,endpoint,config"
+            if proc_name == "get_mcp_servers":
+                fields += ",description,enabled,tool_count,created_at"
+            return self._sqlite_rows(f"SELECT {fields} FROM mcp_server WHERE {where} ORDER BY created_at ASC", params)
+        if proc_name == "update_mcp_server":
+            mcp_id, user_uid, name, transport, endpoint, config, description, enabled, tool_count, deleted = params
+            self._sqlite_update_optional(
+                "mcp_server", "mcp_id", mcp_id, "user_uid", user_uid,
+                {
+                    "mcp_name": name, "transport": transport, "endpoint": endpoint, "config": config,
+                    "description": description, "enabled": None if enabled is None else int(bool(enabled)),
+                    "tool_count": tool_count, "is_deleted": None if deleted is None else int(bool(deleted)),
+                },
+            )
+            return []
+        if proc_name == "create_cron_task":
+            self._sqlite_execute(
+                """INSERT OR REPLACE INTO cron_task
+                (task_id,user_uid,conversation_uid,platform,name,prompt,execute,exec_time,repeat,extra_config,description)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                params,
+            )
+            return []
+        if proc_name in ("get_cron_tasks", "get_cron_task_by_id", "get_all_enabled_cron_tasks"):
+            fields = """task_id,user_uid,conversation_uid,platform,name,prompt,execute,exec_time,repeat,
+            extra_config,description,enabled,created_at,updated_at"""
+            if proc_name == "get_cron_tasks":
+                query, values = f"SELECT {fields} FROM cron_task WHERE user_uid=? AND is_deleted=0 ORDER BY exec_time", params
+            elif proc_name == "get_cron_task_by_id":
+                query, values = f"SELECT {fields} FROM cron_task WHERE task_id=? AND is_deleted=0 LIMIT 1", params
+            else:
+                query, values = f"SELECT {fields} FROM cron_task WHERE enabled=1 AND is_deleted=0 ORDER BY exec_time", ()
+            return self._sqlite_rows(query, values)
+        if proc_name == "update_cron_task":
+            task_id, conversation_id, platform, name, prompt, execute, exec_time, repeat, extra, description, enabled, deleted = params
+            updates = {
+                "conversation_uid": conversation_id, "platform": platform, "name": name, "prompt": prompt,
+                "execute": execute, "exec_time": exec_time, "repeat": repeat, "extra_config": extra,
+                "description": description, "enabled": None if enabled is None else int(bool(enabled)),
+                "is_deleted": None if deleted is None else int(bool(deleted)),
+            }
+            actual = [(key, value) for key, value in updates.items() if value is not None]
+            if actual:
+                assignments = ",".join(f"{key}=?" for key, _ in actual)
+                self._sqlite_execute(
+                    f"UPDATE cron_task SET {assignments},updated_at=CURRENT_TIMESTAMP WHERE task_id=?",
+                    [value for _, value in actual] + [task_id],
+                )
+            return []
+        raise NotImplementedError(f"SQLite procedure is not implemented: {proc_name}")
                 
 
 
@@ -145,6 +510,16 @@ class MysqlService:
             user_uid = payload["client_id"]
             username = payload["username"]
             password = payload["password"]
+            if self._sqlite_conn:
+                self._sqlite_conn.execute(
+                    "INSERT INTO users (user_uid, username, password) VALUES (?, ?, ?)",
+                    (user_uid, username, password),
+                )
+                self._sqlite_conn.commit()
+                return {
+                    "success": True,
+                    "messages": {"msg": "success", "uid": user_uid},
+                }
             await self._call_procedure("create_user", (user_uid, username, password))
             return {
                 "success": True,
@@ -154,7 +529,7 @@ class MysqlService:
                 },
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][create_a_user] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][create_a_user] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": {
@@ -185,6 +560,17 @@ class MysqlService:
         try:
             username = payload["username"]
             password = payload["password"]
+            if self._sqlite_conn:
+                row = self._sqlite_conn.execute(
+                    "SELECT user_uid FROM users WHERE username = ? AND password = ?",
+                    (username, password),
+                ).fetchone()
+                if not row:
+                    raise Exception("User do not exist or wrong password.")
+                return {
+                    "success": True,
+                    "messages": {"msg": "success", "uid": row[0]},
+                }
             res = await self._call_procedure("verify_user", (username, password))
             if(len(res) != 1): raise Exception("User do not exist or wrong password.")
             return {
@@ -195,7 +581,7 @@ class MysqlService:
                 },
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][verify_user] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][verify_user] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": {
@@ -226,6 +612,16 @@ class MysqlService:
         try:
             user_uid = payload["client_id"]
             user_name = payload.get("username")
+            if self._sqlite_conn:
+                row = self._sqlite_conn.execute(
+                    "SELECT user_uid FROM users WHERE user_uid = ?",
+                    (user_uid,),
+                ).fetchone()
+                if exist and not row:
+                    raise Exception("User do not exist.")
+                if not exist and row:
+                    raise Exception("User has already exist.")
+                return {"success": True, "messages": "success"}
             res = await self._call_procedure("ensure_user_exists", (user_uid, user_name))
             # logger.debug(res)
             if exist and len(res) == 0: raise Exception("User do not exist.")
@@ -235,7 +631,7 @@ class MysqlService:
                 "messages": "success",
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][ensure_user_exists] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][ensure_user_exists] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -270,7 +666,7 @@ class MysqlService:
                 "messages": rows,
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][fetch_conversation_list] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][fetch_conversation_list] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -301,7 +697,7 @@ class MysqlService:
                 "messages": rows,
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][get_conversation_meta_by_id] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][get_conversation_meta_by_id] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -341,7 +737,7 @@ class MysqlService:
                 "messages": f"{conversation_uid}",
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][create_conversation] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][create_conversation] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -387,7 +783,7 @@ class MysqlService:
                 "messages": f"{conversation_uid}",
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][update_conversation] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][update_conversation] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -478,7 +874,7 @@ class MysqlService:
                 }
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][append_message] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][append_message] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -539,7 +935,7 @@ class MysqlService:
                 "messages": msg_info
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][delete_messages] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][delete_messages] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -580,7 +976,7 @@ class MysqlService:
                 "next_cursor": next_cursor
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][fetch_messages_after_cursor] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][fetch_messages_after_cursor] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -613,7 +1009,7 @@ class MysqlService:
                 "messages": rows,
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][fetch_messages_for_user] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][fetch_messages_for_user] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -670,7 +1066,7 @@ class MysqlService:
 
         except Exception as e:
             logger.exception(
-                f"[MysqlService][search_messages_by_keyword] ❌ Error: {type(e).__name__}: {e}"
+                f"[MysqlService][search_messages_by_keyword] [ERROR] Error: {type(e).__name__}: {e}"
             )
             return {
                 "success": False,
@@ -718,7 +1114,7 @@ class MysqlService:
                 "messages": rows,
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][insert_file_info] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][insert_file_info] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -754,7 +1150,7 @@ class MysqlService:
                 "messages": rows,
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][update_file_info] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][update_file_info] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -787,7 +1183,7 @@ class MysqlService:
                 "messages": rows,
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][fetch_recent_files] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][fetch_recent_files] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -834,7 +1230,7 @@ class MysqlService:
                 "messages": rows,
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][fetch_shortterm_memory] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][fetch_shortterm_memory] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -872,7 +1268,7 @@ class MysqlService:
                 "messages": "success",
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][insert_shortterm_memory] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][insert_shortterm_memory] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -907,7 +1303,7 @@ class MysqlService:
                 "messages": "success",
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][delete_shortterm_memory] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][delete_shortterm_memory] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -959,7 +1355,7 @@ class MysqlService:
                 },
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][create_llm_provider] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][create_llm_provider] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -1001,7 +1397,7 @@ class MysqlService:
                 "messages": rows,
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][get_llm_providers] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][get_llm_providers] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -1042,7 +1438,7 @@ class MysqlService:
                 "messages": rows,
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][get_llm_provider_by_id] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][get_llm_provider_by_id] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -1094,7 +1490,7 @@ class MysqlService:
                 "messages": 'success',
             }
         except Exception as e:
-            logger.exception(f"[MysqlService][update_llm_provider] ❌ Error: {type(e).__name__}: {e}")
+            logger.exception(f"[MysqlService][update_llm_provider] [ERROR] Error: {type(e).__name__}: {e}")
             return {
                 "success": False,
                 "messages": f"fail: {e}",
@@ -1153,7 +1549,7 @@ class MysqlService:
 
         except Exception as e:
             logger.exception(
-                f"[MysqlService][create_mcp_server] ❌ Error: {type(e).__name__}: {e}"
+                f"[MysqlService][create_mcp_server] [ERROR] Error: {type(e).__name__}: {e}"
             )
 
             return {
@@ -1192,7 +1588,7 @@ class MysqlService:
 
         except Exception as e:
             logger.exception(
-                f"[MysqlService][get_mcp_servers] ❌ Error: {type(e).__name__}: {e}"
+                f"[MysqlService][get_mcp_servers] [ERROR] Error: {type(e).__name__}: {e}"
             )
 
             return {
@@ -1231,7 +1627,7 @@ class MysqlService:
 
         except Exception as e:
             logger.exception(
-                f"[MysqlService][get_enabled_mcp_servers] ❌ Error: {type(e).__name__}: {e}"
+                f"[MysqlService][get_enabled_mcp_servers] [ERROR] Error: {type(e).__name__}: {e}"
             )
 
             return {
@@ -1301,7 +1697,7 @@ class MysqlService:
 
         except Exception as e:
             logger.exception(
-                f"[MysqlService][update_mcp_server] ❌ Error: {type(e).__name__}: {e}"
+                f"[MysqlService][update_mcp_server] [ERROR] Error: {type(e).__name__}: {e}"
             )
 
             return {
@@ -1372,7 +1768,7 @@ class MysqlService:
 
         except Exception as e:
             logger.exception(
-                f"[MysqlService][create_cron_task] ❌ Error: {type(e).__name__}: {e}"
+                f"[MysqlService][create_cron_task] [ERROR] Error: {type(e).__name__}: {e}"
             )
 
             return {
@@ -1406,7 +1802,7 @@ class MysqlService:
 
         except Exception as e:
             logger.exception(
-                f"[MysqlService][get_all_enabled_cron_tasks] ❌ Error: {type(e).__name__}: {e}"
+                f"[MysqlService][get_all_enabled_cron_tasks] [ERROR] Error: {type(e).__name__}: {e}"
             )
 
             return {
@@ -1444,7 +1840,7 @@ class MysqlService:
 
         except Exception as e:
             logger.exception(
-                f"[MysqlService][get_cron_tasks] ❌ Error: {type(e).__name__}: {e}"
+                f"[MysqlService][get_cron_tasks] [ERROR] Error: {type(e).__name__}: {e}"
             )
 
             return {
@@ -1482,7 +1878,7 @@ class MysqlService:
 
         except Exception as e:
             logger.exception(
-                f"[MysqlService][get_cron_task_by_id] ❌ Error: {type(e).__name__}: {e}"
+                f"[MysqlService][get_cron_task_by_id] [ERROR] Error: {type(e).__name__}: {e}"
             )
 
             return {
@@ -1546,7 +1942,7 @@ class MysqlService:
 
         except Exception as e:
             logger.exception(
-                f"[MysqlService][update_cron_task] ❌ Error: {type(e).__name__}: {e}"
+                f"[MysqlService][update_cron_task] [ERROR] Error: {type(e).__name__}: {e}"
             )
 
             return {

@@ -1,0 +1,46 @@
+{
+  "mcpServers": {
+    "cua_repl": {
+      "command": "<CUA_NODE_RUNTIME>\\node.exe",
+      "args": [
+        "<PLUGIN_ROOT>\\scripts\\launch.mjs"
+      ],
+      "enabled": true,
+      "enabled_tools": [
+        "js",
+        "js_reset",
+        "turn_ended"
+      ],
+      "omit_tools_from": [
+        "code_mode",
+        "deferred"
+      ],
+      "startup_timeout_sec": 120,
+      "tools": {
+        "js": {
+          "output_token_limit": 25000
+        }
+      },
+      "env_vars": [],
+      "env": {
+        "NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS": "1000",
+        "NODE_REPL_NODE_MODULE_DIRS": "<CUA_NODE_RUNTIME>\\node_modules",
+        "NODE_REPL_NODE_PATH": "<CUA_NODE_RUNTIME>\\node.exe",
+        "NODE_REPL_TRUSTED_CODE_PATHS": "<CODEX_HOME>;<CUA_NODE_RUNTIME>\\node_modules",
+        "CODEX_HOME": "<CODEX_HOME>",
+        "BROWSER_USE_AVAILABLE_BACKENDS": "chrome,iab",
+        "BROWSER_USE_TINYSKY_ENABLED": "1",
+        "NODE_REPL_INSTRUCTIONS_USE_CASE_BROWSER": "Control the in-app browser in conjunction with the Browser Plugin.",
+        "NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME": "Control the Chrome browser in conjunction with the Chrome Plugin. Prefer this method of controlling Chrome over alternatives such as Computer Use unless the user explicitly mentions an alternative.",
+        "BROWSER_USE_CODEX_APP_BUILD_FLAVOR": "prod",
+        "BROWSER_USE_CODEX_APP_VERSION": "26.903.71938",
+        "NODE_REPL_TRUSTED_SERVICES": "{\"browser\":\"<BROWSER_SERVICE>\",\"sky\":\"@oai/sky/service\"}",
+        "SKY_CUA_NATIVE_PIPE": "1",
+        "SKY_CUA_NATIVE_PIPE_DIRECTORY": "<NATIVE_PIPE_DIRECTORY>",
+        "CODEX_CLI_PATH": "<CODEX_CLI_PATH>",
+        "CUA_REPL_NODE_REPL_PATH": "<CUA_NODE_RUNTIME>\\node_repl.exe",
+        "CUA_REPL_ENABLED_SURFACES": "browser,computer"
+      }
+    }
+  }
+}

@@ -40,7 +40,7 @@ def auto_load(app: FastAPI):
             obj = getattr(module, attr)
             if isinstance(obj, APIRouter):
                 app.include_router(obj)
-                print(f"✔ 已注册路由: {package_name}.{module_name}.{attr}")
+                print(f"[OK] Router registered: {package_name}.{module_name}.{attr}")
 
 async def lifespan(app: FastAPI):
     # 启动逻辑
@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
     # await ws_list.remove_all()
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="APIX SERVICE", version="1.0.0", lifespan=lifespan)
+    app = FastAPI(title="OpenStarry SERVICE", version="1.0.0", lifespan=lifespan)
     # auto_load(app)
 
     @app.get("/health")

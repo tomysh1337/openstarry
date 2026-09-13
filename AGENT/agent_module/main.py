@@ -5,18 +5,18 @@ from fastapi import FastAPI, APIRouter
 import uvicorn
 from fastapi.responses import JSONResponse
 
-import apix_agent.routers as routers_pkg
-from apix_agent.commons.auto_init import auto_init
-from apix_agent.apix_event_handler.event_handler_manager import event_handler_mgr
-from apix_agent.apix_event_pipe.common_event.common_event_gateway import pipe_event_handler
-from apix_agent.commons.logger import Logger
+import openstarry_agent.routers as routers_pkg
+from openstarry_agent.commons.auto_init import auto_init
+from openstarry_agent.openstarry_event_handler.event_handler_manager import event_handler_mgr
+from openstarry_agent.openstarry_event_pipe.common_event.common_event_gateway import pipe_event_handler
+from openstarry_agent.commons.logger import Logger
 
 
 def auto_load_router(app: FastAPI):
     pkg_path = routers_pkg.__path__
 
     for _, module_name, _ in pkgutil.iter_modules(pkg_path):
-        full_name = f"apix_agent.routers.{module_name}"
+        full_name = f"openstarry_agent.routers.{module_name}"
         print(f"[auto_load_router] Load module: {full_name}")
 
         module = importlib.import_module(full_name)
@@ -25,7 +25,7 @@ def auto_load_router(app: FastAPI):
             obj = getattr(module, attr)
             if isinstance(obj, APIRouter):
                 app.include_router(obj)
-                print(f"✔ Router register: {full_name}.{attr}")
+                print(f"[OK] Router register: {full_name}.{attr}")
 
 
 async def lifespan(app: FastAPI):
@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="APIX AGENT", version="1.0.0", lifespan=lifespan)
+    app = FastAPI(title="OpenStarry AGENT", version="1.0.0", lifespan=lifespan)
     return app
 
 

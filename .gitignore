@@ -22,6 +22,10 @@ env/
 # Node / Vite / Vue / Electron
 node_modules/
 dist/
+!CLIENT/openstarry-app/vendor/computer-use/source/packages/@oai/cua/dist/
+!CLIENT/openstarry-app/vendor/computer-use/source/packages/@oai/cua/dist/**
+!CLIENT/openstarry-app/vendor/computer-use/source/packages/@oai/sky/dist/
+!CLIENT/openstarry-app/vendor/computer-use/source/packages/@oai/sky/dist/**
 dist-electron/
 .vite/
 out/
@@ -45,7 +49,7 @@ pnpm-debug.log*
 ## Runtime / Data
 # AGENT
 AGENT/model_running_time/
-AGENT/apix_running_time/
+AGENT/OpenStarry_running_time/
 AGENT/agent_module/data/
 # MEMORY
 MEMORY/memory_module/data/
@@ -58,9 +62,13 @@ TASK/logs/
 
 
 # logs
-.apix_pids
+.OpenStarry_pids
 logs/
 *.log
+
+# Temporary duplicate copied while preparing the computer-use runtime. The
+# packaged copies live under the vendored @oai packages instead.
+CLIENT/openstarry-app/vendor/computer-use/runtime/
 cache/
 tmp/
 temp/

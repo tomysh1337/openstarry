@@ -1,0 +1,54 @@
+import { createRouter, createWebHashHistory } from 'vue-router'
+import { pageRegistry } from './pageRegistry'
+
+// Static routes that always exist
+const staticRoutes = [
+  {
+    path: '/',
+    redirect: '/home'
+  },
+  {
+    path: '/home',
+    name: 'home-page',
+    redirect: '/assistPage',
+    component: () => import('@renderer/views/homePage.vue')
+  }
+]
+
+const router = createRouter({
+  history: createWebHashHistory(import.meta.env.BASE_URL),
+  routes: staticRoutes
+})
+
+// Dynamically register pages from registry
+export function registerDynamicRoutes() {
+  pageRegistry.forEach(page => {
+    if (!router.hasRoute(page.name)) {
+      router.addRoute({
+        path: page.path,
+        name: page.name,
+        component: page.component
+      })
+    }
+  })
+}
+
+export default router
+
+
+
+
+// 运行时动态扩展示例
+// import { pageRegistry } from '@/router/pageRegistry'
+// import { registerDynamicRoutes } from '@/router'
+
+// // Inject at runtime (plugin / backend / electron main)
+// pageRegistry.push({
+//   path: '/pluginExample',
+//   name: 'plugin-example',
+//   title: '插件示例',
+//   icon: 'House',
+//   component: () => import('@/plugins/example/Page.vue')
+// })
+
+// registerDynamicRoutes()

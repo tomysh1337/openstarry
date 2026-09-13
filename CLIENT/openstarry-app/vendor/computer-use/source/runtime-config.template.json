@@ -1,0 +1,31 @@
+{
+  "version": "26.903.71938",
+  "mcpServers": {
+    "cua_repl": {
+      "command": "<CUA_NODE_RUNTIME>\\node.exe",
+      "args": [
+        "<SNAPSHOT_ROOT>\\plugin\\unified-computer-use\\scripts\\launch.mjs"
+      ],
+      "enabled_tools": [
+        "js",
+        "js_reset",
+        "turn_ended"
+      ],
+      "env": {
+        "CUA_REPL_NODE_REPL_PATH": "<CUA_NODE_RUNTIME>\\node_repl.exe",
+        "NODE_REPL_NODE_MODULE_DIRS": "<CUA_NODE_RUNTIME>\\node_modules",
+        "NODE_REPL_NODE_PATH": "<CUA_NODE_RUNTIME>\\node.exe",
+        "NODE_REPL_TRUSTED_CODE_PATHS": "<CODEX_HOME>;<CUA_NODE_RUNTIME>\\node_modules",
+        "CODEX_HOME": "<CODEX_HOME>",
+        "BROWSER_USE_AVAILABLE_BACKENDS": "chrome,iab",
+        "BROWSER_USE_TINYSKY_ENABLED": "1",
+        "BROWSER_USE_CODEX_APP_BUILD_FLAVOR": "prod",
+        "BROWSER_USE_CODEX_APP_VERSION": "26.903.71938",
+        "NODE_REPL_TRUSTED_SERVICES": "{\"browser\":\"@oai/browser-desktop/service\",\"sky\":\"@oai/sky/service\"}",
+        "SKY_CUA_NATIVE_PIPE": "1",
+        "SKY_CUA_NATIVE_PIPE_DIRECTORY": "<NATIVE_PIPE_DIRECTORY>",
+        "CUA_REPL_ENABLED_SURFACES": "browser,computer"
+      }
+    }
+  }
+}

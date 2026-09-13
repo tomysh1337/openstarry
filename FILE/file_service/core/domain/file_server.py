@@ -532,6 +532,21 @@ class FileService:
 
                 seen_hashes.add(file_hash)
 
+                # Store identical attachments only once on disk. Metadata may
+                # reference the same content-addressed blob from several chats.
+                blob_dir = os.path.join(self._base_dir, "blobs", client_id, file_hash[:2])
+                os.makedirs(blob_dir, exist_ok=True)
+                blob_path = os.path.join(blob_dir, file_hash)
+                if os.path.exists(blob_path):
+                    os.remove(file_path)
+                else:
+                    os.replace(file_path, blob_path)
+                try:
+                    os.rmdir(dir_path)
+                except OSError:
+                    pass
+                file_path = blob_path
+
                 mime_type, _ = mimetypes.guess_type(file_name)
                 if not mime_type:
                     _, mime_type = os.path.splitext(file_name)

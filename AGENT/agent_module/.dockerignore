@@ -8,6 +8,6 @@ __pycache__
 .gitignore
 .env
 *.log
-apix_running_time
+OpenStarry_running_time
 data
 README.md

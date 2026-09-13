@@ -1,10 +1,10 @@
-# Start all APIX backend services in Docker Compose.
+# Start all OpenStarry backend services in Docker Compose.
 # The Electron frontend should still run on the host.
 
 $ROOT = Get-Location
 
 # Stop legacy infrastructure containers started by setup.ps1 so Compose can own them.
-$legacy = @("apix-mysql", "redis-memo")
+$legacy = @("OpenStarry-mysql", "redis-memo")
 foreach ($name in $legacy) {
     $exists = docker ps -a --format "{{.Names}}" | Select-String "^$name$"
     if ($exists) {
@@ -15,9 +15,9 @@ foreach ($name in $legacy) {
 }
 
 # Resolve host-side paths so AGENT can spawn sandbox containers correctly.
-$hostBaseDir = (Resolve-Path "$ROOT\AGENT\apix_running_time" -ErrorAction SilentlyContinue)
+$hostBaseDir = (Resolve-Path "$ROOT\AGENT\OpenStarry_running_time" -ErrorAction SilentlyContinue)
 if (-not $hostBaseDir) {
-    $hostBaseDir = "$ROOT\AGENT\apix_running_time"
+    $hostBaseDir = "$ROOT\AGENT\OpenStarry_running_time"
     New-Item -ItemType Directory -Path $hostBaseDir -Force | Out-Null
     $hostBaseDir = (Resolve-Path $hostBaseDir).Path
 }
@@ -25,7 +25,7 @@ if (-not $hostBaseDir) {
 $env:HOST_BASE_DIR = $hostBaseDir
 
 Write-Host "HOST_BASE_DIR set to: $hostBaseDir"
-Write-Host "Starting APIX services with Docker Compose..."
+Write-Host "Starting OpenStarry services with Docker Compose..."
 
 docker compose -f "$ROOT\docker-compose.yml" up -d --build
 

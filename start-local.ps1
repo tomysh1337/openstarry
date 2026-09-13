@@ -1,7 +1,9 @@
-# Start all APIX backend services locally (non-Docker mode).
+# Start all OpenStarry backend services locally (non-Docker mode).
 # Run this after setup.ps1 has installed dependencies and started Redis/MySQL.
 
-$ROOT = Get-Location
+$ROOT = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$logDir = Join-Path $ROOT "logs"
+New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 
 $services = @(
     @{ Name = "TASK";  Path = "TASK/task_flow_module";   Port = 5090 },
@@ -10,14 +12,19 @@ $services = @(
     @{ Name = "FILE";  Path = "FILE/file_service";       Port = 5094 }
 )
 
-Write-Host "Starting APIX backend services locally..."
+Write-Host "Starting OpenStarry backend services locally..."
 
 foreach ($svc in $services) {
-    $jobName = "apix-$($svc.Name.ToLower())"
-    Push-Location "$ROOT\$($svc.Path)"
+    $serviceDir = Join-Path $ROOT $svc.Path
+    $stdoutLog = Join-Path $logDir "$($svc.Name.ToLower()).out.log"
+    $stderrLog = Join-Path $logDir "$($svc.Name.ToLower()).err.log"
     Write-Host "[$($svc.Name)] Starting uvicorn on port $($svc.Port)..."
-    Start-Process -NoNewWindow -FilePath "uv" -ArgumentList "run", "main.py" -WorkingDirectory (Get-Location)
-    Pop-Location
+    $uv = (Get-Command uv -ErrorAction Stop).Source
+    Start-Process -WindowStyle Hidden -FilePath $uv `
+        -ArgumentList "run", "main.py" `
+        -WorkingDirectory $serviceDir `
+        -RedirectStandardOutput $stdoutLog `
+        -RedirectStandardError $stderrLog | Out-Null
 }
 
 Write-Host "All backend services started."

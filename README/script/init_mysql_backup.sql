@@ -310,7 +310,7 @@ CREATE TABLE cron_task (
     -- Business ID
     task_id VARCHAR(64) NOT NULL,
 
-    -- ApixIdentity
+    -- OpenStarryIdentity
     user_uid VARCHAR(64) NOT NULL,
     conversation_uid VARCHAR(255) NOT NULL,
     platform VARCHAR(32) NOT NULL DEFAULT 'default',

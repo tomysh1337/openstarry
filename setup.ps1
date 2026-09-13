@@ -1,5 +1,5 @@
 
-Write-Host "==== APIX One-click Setup (Windows) ===="
+Write-Host "==== OpenStarry One-click Setup (Windows) ===="
 
 $ROOT = Get-Location
 
@@ -94,12 +94,12 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-Docker-Run-Safe "apix-mysql" "docker run -d --name apix-mysql -p 3307:3306 -v $ROOT/MEMORY/memory_module/data/mysql_data:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=your_root_password -e MYSQL_DATABASE=apix_database -e MYSQL_USER=apix -e MYSQL_PASSWORD=apixapix --restart unless-stopped mysql:8.0"
+Docker-Run-Safe "OpenStarry-mysql" "docker run -d --name OpenStarry-mysql -p 3307:3306 -v $ROOT/MEMORY/memory_module/data/mysql_data:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=your_root_password -e MYSQL_DATABASE=OpenStarry_database -e MYSQL_USER=OpenStarry -e MYSQL_PASSWORD=OpenStarryOpenStarry --restart unless-stopped mysql:8.0"
 
 # Waiting MySQL ready
 Write-Host "Waiting for MySQL..."
 for ($i=0; $i -lt 20; $i++) {
-    $result = docker exec apix-mysql mysqladmin ping -h "127.0.0.1" -uroot -pyour_root_password 2>$null
+    $result = docker exec OpenStarry-mysql mysqladmin ping -h "127.0.0.1" -uroot -pyour_root_password 2>$null
     if ($result -like "*mysqld is alive*") {
         Write-Host "MySQL is ready"
         break
@@ -109,8 +109,8 @@ for ($i=0; $i -lt 20; $i++) {
 
 Write-Host "[4/7] Initializing database..."
 
-Get-Content "$ROOT\README\script\init_mysql_backup.sql" -Raw | docker exec -i apix-mysql `
-  mysql -u root -pyour_root_password apix_database
+Get-Content "$ROOT\README\script\init_mysql_backup.sql" -Raw | docker exec -i OpenStarry-mysql `
+  mysql -u root -pyour_root_password OpenStarry_database
 
 # =========================
 # Backend
@@ -138,7 +138,7 @@ foreach ($m in $modules) {
 # =========================
 Write-Host "[6/7] Init frontend..."
 
-Push-Location "$ROOT\CLIENT\apix-app"
+Push-Location "$ROOT\CLIENT\OpenStarry-app"
 
 # Install Volta
 if (!(Get-Command volta -ErrorAction SilentlyContinue)) {
