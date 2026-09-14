@@ -1,0 +1,15 @@
+{
+  "name": "OpenStarry",
+  "short_name": "OpenStarry",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#081113",
+  "theme_color": "#0b1719",
+  "icons": [
+    {
+      "src": "/OpenStarry.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

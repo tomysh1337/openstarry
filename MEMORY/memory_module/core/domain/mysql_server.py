@@ -115,11 +115,235 @@ class MysqlService:
             );
             """
         )
+        message_columns = {
+            row["name"]
+            for row in self._sqlite_conn.execute("PRAGMA table_info(messages)").fetchall()
+        }
+        if "sync_id" not in message_columns:
+            self._sqlite_conn.execute(
+                "ALTER TABLE messages ADD COLUMN sync_id TEXT NOT NULL DEFAULT ''"
+            )
+        self._sqlite_conn.execute(
+            """UPDATE messages SET sync_id=lower(hex(randomblob(16)))
+            WHERE sync_id IS NULL OR sync_id=''"""
+        )
+        self._sqlite_conn.execute(
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_message_sync
+            ON messages(user_uid,conversation_uid,sync_id) WHERE sync_id<>''"""
+        )
         self._sqlite_conn.execute(
             "INSERT OR IGNORE INTO users(user_uid,username,password) VALUES (?,?,?)",
             ("local-user", "本地用户", ""),
         )
         self._sqlite_conn.commit()
+
+    def export_sync_records(self, user_uid: str) -> list[dict]:
+        if not self._sqlite_conn:
+            raise RuntimeError("Local SQLite is not initialized")
+        self._sqlite_conn.execute(
+            """UPDATE messages SET sync_id=lower(hex(randomblob(16)))
+            WHERE sync_id IS NULL OR sync_id=''"""
+        )
+        self._sqlite_conn.commit()
+        conversations = self._sqlite_rows(
+            """SELECT platform,conversation_uid,title,work_space,last_active_at,
+            latest_cursor,latest_timestamp,has_new_message,is_pinned,is_cron,
+            is_deleted,created_at FROM conversations WHERE user_uid=?""",
+            (user_uid,),
+        )
+        messages = self._sqlite_rows(
+            """SELECT conversation_uid,sync_id,generation_id,node_id,parent_id,
+            role,content,think,extra,info,created_at,msg_cursor,msg_timestamp,
+            is_deleted FROM messages WHERE user_uid=?""",
+            (user_uid,),
+        )
+        records = []
+        for conversation in conversations:
+            records.append(
+                {
+                    "id": "conversation:" + conversation["conversation_uid"],
+                    "kind": "conversation",
+                    "deleted": bool(conversation.get("is_deleted")),
+                    "payload": conversation,
+                }
+            )
+        for message in messages:
+            records.append(
+                {
+                    "id": "message:"
+                    + message["conversation_uid"]
+                    + ":"
+                    + message["sync_id"],
+                    "kind": "message",
+                    "deleted": bool(message.get("is_deleted")),
+                    "payload": message,
+                }
+            )
+        return records
+
+    @staticmethod
+    def _sync_json(value):
+        if value is None or isinstance(value, str):
+            return value
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+    def apply_sync_records(self, user_uid: str, records: list[dict]) -> int:
+        if not self._sqlite_conn:
+            raise RuntimeError("Local SQLite is not initialized")
+        applied = 0
+        ordered = sorted(
+            records,
+            key=lambda item: 0 if item.get("kind") == "conversation" else 1,
+        )
+        try:
+            self._sqlite_conn.execute("BEGIN IMMEDIATE")
+            self._sqlite_conn.execute(
+                "INSERT OR IGNORE INTO users(user_uid,username,password) VALUES (?,?,?)",
+                (user_uid, "本地用户", ""),
+            )
+            for record in ordered:
+                payload = record.get("payload") or {}
+                deleted = int(bool(record.get("deleted")))
+                if record.get("kind") == "conversation":
+                    conversation_uid = payload.get("conversation_uid")
+                    if not conversation_uid:
+                        continue
+                    current_conversation = self._sqlite_conn.execute(
+                        """SELECT id FROM conversations
+                        WHERE user_uid=? AND conversation_uid=?""",
+                        (user_uid, conversation_uid),
+                    ).fetchone()
+                    if deleted and not current_conversation:
+                        continue
+                    self._sqlite_conn.execute(
+                        """INSERT INTO conversations(
+                        user_uid,platform,conversation_uid,title,work_space,
+                        last_active_at,latest_cursor,latest_timestamp,
+                        has_new_message,is_pinned,is_cron,is_deleted,created_at
+                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        ON CONFLICT(conversation_uid) DO UPDATE SET
+                        platform=excluded.platform,title=excluded.title,
+                        work_space=excluded.work_space,
+                        last_active_at=excluded.last_active_at,
+                        latest_cursor=MAX(conversations.latest_cursor,excluded.latest_cursor),
+                        latest_timestamp=MAX(conversations.latest_timestamp,excluded.latest_timestamp),
+                        has_new_message=excluded.has_new_message,
+                        is_pinned=excluded.is_pinned,is_cron=excluded.is_cron,
+                        is_deleted=excluded.is_deleted""",
+                        (
+                            user_uid,
+                            payload.get("platform") or "default",
+                            conversation_uid,
+                            payload.get("title") or "新的聊天...",
+                            payload.get("work_space") or "",
+                            payload.get("last_active_at") or payload.get("created_at"),
+                            int(payload.get("latest_cursor") or 0),
+                            int(payload.get("latest_timestamp") or 0),
+                            int(bool(payload.get("has_new_message"))),
+                            int(bool(payload.get("is_pinned"))),
+                            int(bool(payload.get("is_cron"))),
+                            deleted,
+                            payload.get("created_at") or time.strftime("%Y-%m-%d %H:%M:%S"),
+                        ),
+                    )
+                    applied += 1
+                    continue
+                if record.get("kind") != "message":
+                    continue
+                conversation_uid = payload.get("conversation_uid")
+                sync_id = payload.get("sync_id")
+                if not conversation_uid or not sync_id:
+                    continue
+                conversation = self._sqlite_conn.execute(
+                    "SELECT id,latest_cursor FROM conversations WHERE user_uid=? AND conversation_uid=?",
+                    (user_uid, conversation_uid),
+                ).fetchone()
+                if not conversation:
+                    self._sqlite_conn.execute(
+                        """INSERT INTO conversations(user_uid,conversation_uid,title)
+                        VALUES (?,?,?)""",
+                        (user_uid, conversation_uid, "同步的聊天"),
+                    )
+                    conversation = self._sqlite_conn.execute(
+                        "SELECT id,latest_cursor FROM conversations WHERE user_uid=? AND conversation_uid=?",
+                        (user_uid, conversation_uid),
+                    ).fetchone()
+                existing = self._sqlite_conn.execute(
+                    """SELECT id,msg_cursor FROM messages
+                    WHERE user_uid=? AND conversation_uid=? AND sync_id=?""",
+                    (user_uid, conversation_uid, sync_id),
+                ).fetchone()
+                if deleted and not existing:
+                    continue
+                desired_cursor = int(payload.get("msg_cursor") or 0)
+                if existing:
+                    cursor = int(existing["msg_cursor"])
+                    self._sqlite_conn.execute(
+                        """UPDATE messages SET generation_id=?,node_id=?,parent_id=?,
+                        role=?,content=?,think=?,extra=?,info=?,msg_timestamp=?,
+                        is_deleted=? WHERE id=?""",
+                        (
+                            payload.get("generation_id") or "",
+                            payload.get("node_id") or "",
+                            payload.get("parent_id") or "",
+                            payload.get("role") or "info",
+                            payload.get("content"),
+                            payload.get("think"),
+                            self._sync_json(payload.get("extra")),
+                            self._sync_json(payload.get("info")),
+                            int(payload.get("msg_timestamp") or 0),
+                            deleted,
+                            existing["id"],
+                        ),
+                    )
+                else:
+                    occupied = self._sqlite_conn.execute(
+                        """SELECT 1 FROM messages WHERE conversation_id=? AND msg_cursor=?""",
+                        (conversation["id"], desired_cursor),
+                    ).fetchone()
+                    cursor = desired_cursor
+                    if cursor <= 0 or occupied:
+                        cursor = int(conversation["latest_cursor"] or 0) + 1
+                    self._sqlite_conn.execute(
+                        """INSERT INTO messages(
+                        user_uid,conversation_id,conversation_uid,sync_id,
+                        generation_id,node_id,parent_id,role,content,think,
+                        extra,info,created_at,msg_cursor,msg_timestamp,is_deleted
+                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (
+                            user_uid,
+                            conversation["id"],
+                            conversation_uid,
+                            sync_id,
+                            payload.get("generation_id") or "",
+                            payload.get("node_id") or "",
+                            payload.get("parent_id") or "",
+                            payload.get("role") or "info",
+                            payload.get("content"),
+                            payload.get("think"),
+                            self._sync_json(payload.get("extra")),
+                            self._sync_json(payload.get("info")),
+                            payload.get("created_at") or time.strftime("%Y-%m-%d %H:%M:%S"),
+                            cursor,
+                            int(payload.get("msg_timestamp") or 0),
+                            deleted,
+                        ),
+                    )
+                self._sqlite_conn.execute(
+                    """UPDATE conversations SET latest_cursor=MAX(latest_cursor,?),
+                    latest_timestamp=MAX(latest_timestamp,?) WHERE id=?""",
+                    (
+                        cursor,
+                        int(payload.get("msg_timestamp") or 0),
+                        conversation["id"],
+                    ),
+                )
+                applied += 1
+            self._sqlite_conn.commit()
+            return applied
+        except Exception:
+            self._sqlite_conn.rollback()
+            raise
 
     async def _close(self):
         """Close MySQL connection pool."""

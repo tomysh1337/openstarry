@@ -186,6 +186,10 @@ const api = {
     removeSecret: (name) => ipcRenderer.invoke('vault:remove', name),
     computerAction: (action, args = {}, options = {}) => ipcRenderer.invoke('computer:perform', action, args, options),
     resolveComputerApproval: (id, accepted) => ipcRenderer.invoke('computer:resolve-approval', id, accepted),
+    syncStatus: () => ipcRenderer.invoke('sync:status:get'),
+    configureSync: (config, token = '') => ipcRenderer.invoke('sync:configure', config, token),
+    runSync: () => ipcRenderer.invoke('sync:run'),
+    resetSync: () => ipcRenderer.invoke('sync:reset'),
     checkForUpdates: () => ipcRenderer.invoke('update:check'),
     downloadUpdate: () => ipcRenderer.invoke('update:download'),
     installUpdate: () => ipcRenderer.invoke('update:install'),
@@ -193,6 +197,7 @@ const api = {
     onRetentionStatus: (callback) => subscribe('retention:status', callback),
     onComputerApproval: (callback) => subscribe('computer:approval', callback),
     onComputerActive: (callback) => subscribe('computer:active', callback),
+    onSyncStatus: (callback) => subscribe('sync:status', callback),
     onUpdateStatus: (callback) => subscribe('update:status', callback)
   },
   /**

@@ -1,0 +1,6 @@
+android
+assets
+dist
+node_modules
+*.apk
+npm-debug.log*

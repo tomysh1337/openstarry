@@ -40,6 +40,7 @@ pnpm-debug.log*
 # Env & IDE
 .env
 .env.*
+!.env.example
 *.local
 
 .vscode/
@@ -76,3 +77,7 @@ temp/
 # Extra
 *.sqlite3
 *.db
+*.apk
+*.aab
+*.jks
+*.keystore

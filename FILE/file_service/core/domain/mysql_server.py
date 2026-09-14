@@ -106,6 +106,80 @@ class MysqlService:
         self._conn.execute(query, params)
         self._conn.commit()
 
+    def export_sync_records(self, user_uid: str) -> list[dict]:
+        rows = self._rows(
+            """SELECT file_id,file_name,file_path,file_size,mime_type,sha256,
+            deleted,upload_at,deleted_at FROM file_store WHERE user_uid=?""",
+            (user_uid,),
+        )
+        records = []
+        for row in rows:
+            local_path = row.pop("file_path", "")
+            records.append(
+                {
+                    "id": "file:" + row["file_id"],
+                    "kind": "file",
+                    "deleted": bool(row.get("deleted")),
+                    "payload": row,
+                    "localPath": local_path,
+                }
+            )
+        return records
+
+    def apply_sync_records(self, user_uid: str, records: list[dict]) -> int:
+        applied = 0
+        try:
+            self._conn.execute("BEGIN IMMEDIATE")
+            self._conn.execute(
+                "INSERT OR IGNORE INTO users(user_uid,username) VALUES (?,?)",
+                (user_uid, "本地用户"),
+            )
+            for record in records:
+                if record.get("kind") != "file":
+                    continue
+                payload = record.get("payload") or {}
+                file_id = payload.get("file_id")
+                if not file_id:
+                    continue
+                current = self._conn.execute(
+                    "SELECT file_path FROM file_store WHERE file_id=? AND user_uid=?",
+                    (file_id, user_uid),
+                ).fetchone()
+                if record.get("deleted") and not current:
+                    continue
+                file_path = record.get("localPath") or (
+                    current["file_path"] if current else ""
+                )
+                self._conn.execute(
+                    """INSERT INTO file_store(
+                    file_id,file_name,file_path,file_size,mime_type,user_uid,
+                    sha256,deleted,upload_at,deleted_at
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?)
+                    ON CONFLICT(file_id) DO UPDATE SET
+                    file_name=excluded.file_name,file_path=excluded.file_path,
+                    file_size=excluded.file_size,mime_type=excluded.mime_type,
+                    sha256=excluded.sha256,deleted=excluded.deleted,
+                    deleted_at=excluded.deleted_at""",
+                    (
+                        file_id,
+                        payload.get("file_name") or file_id,
+                        file_path,
+                        int(payload.get("file_size") or 0),
+                        payload.get("mime_type"),
+                        user_uid,
+                        payload.get("sha256"),
+                        int(bool(record.get("deleted"))),
+                        payload.get("upload_at") or "1970-01-01 00:00:00",
+                        payload.get("deleted_at"),
+                    ),
+                )
+                applied += 1
+            self._conn.commit()
+            return applied
+        except Exception:
+            self._conn.rollback()
+            raise
+
     @task_handler("mysql.user.ensure_user_exists")
     async def ensure_user_exists(self, payload: dict) -> dict:
         user_uid = payload.get("client_id") or "local-user"

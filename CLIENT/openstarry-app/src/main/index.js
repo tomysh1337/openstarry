@@ -12,6 +12,7 @@ import { DataManager } from './app/dataManager'
 import { NtpClock } from './app/ntpClock'
 import { SecretVault } from './app/vault'
 import { SettingsStore } from './app/settingsStore'
+import { SyncManager } from './app/syncManager'
 import { registerSystemIpc } from './ipc/systemIpc'
 
 const localDataRoot = process.env.LOCALAPPDATA || app.getPath('appData')
@@ -69,6 +70,7 @@ async function startApplication() {
   const dataManager = new DataManager(backendManager.paths, settingsStore, ntpClock)
   const vault = new SecretVault(settingsStore)
   const computerUseManager = new ComputerUseManager(settingsStore, bridgeToken)
+  const syncManager = new SyncManager(backendManager.paths, settingsStore, ntpClock)
 
   createTray()
   mainWindow = createMainWindow({
@@ -83,6 +85,7 @@ async function startApplication() {
   backendManager.on('status', (status) => send('runtime:status', status))
   computerUseManager.on('approval', (request) => send('computer:approval', request))
   computerUseManager.on('active', (status) => send('computer:active', status))
+  syncManager.on('status', (status) => send('sync:status', status))
 
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = false
@@ -100,6 +103,7 @@ async function startApplication() {
     dataManager,
     vault,
     computerUseManager,
+    syncManager,
     autoUpdater,
     getMainWindow: () => mainWindow,
     requestQuit: () => {
@@ -115,7 +119,10 @@ async function startApplication() {
     .catch((error) => console.warn('Local maintenance warning:', error))
 
   backendManager.start()
-    .then(() => initWS('local-user'))
+    .then(() => {
+      initWS('local-user')
+      syncManager.start()
+    })
     .catch((error) => {
       console.error('Runtime initialization failed:', error)
       send('runtime:status', {
@@ -149,7 +156,11 @@ async function startApplication() {
     if (cleanupStarted) return
     cleanupStarted = true
     event.preventDefault()
-    Promise.allSettled([backendManager.stop(), computerUseManager.stop()]).finally(() => {
+    Promise.allSettled([
+      backendManager.stop(),
+      computerUseManager.stop(),
+      syncManager.stop()
+    ]).finally(() => {
       closeWS()
       tray?.destroy()
       app.exit(0)

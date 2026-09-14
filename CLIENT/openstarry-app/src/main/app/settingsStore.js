@@ -22,6 +22,12 @@ const DEFAULT_SETTINGS = Object.freeze({
     enabled: true,
     channel: 'stable'
   },
+  sync: {
+    enabled: false,
+    serverUrl: 'https://openstarry.154-219-110-177.sslip.io',
+    userId: 'tomysh',
+    intervalMinutes: 5
+  },
   retention: {
     trashReminderDays: 45,
     diagnosticLogDays: 30,

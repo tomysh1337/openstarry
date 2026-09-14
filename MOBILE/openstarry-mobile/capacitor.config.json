@@ -1,0 +1,8 @@
+{
+  "appId": "com.tomysh.openstarry.mobile",
+  "appName": "OpenStarry",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

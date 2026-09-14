@@ -13,6 +13,7 @@ export function registerSystemIpc({
   dataManager,
   vault,
   computerUseManager,
+  syncManager,
   autoUpdater,
   getMainWindow,
   requestQuit
@@ -68,6 +69,11 @@ export function registerSystemIpc({
 
   register('computer:perform', (_event, action, args, options) => computerUseManager.perform(action, args, options))
   register('computer:resolve-approval', (_event, id, accepted) => computerUseManager.resolveApproval(id, accepted))
+
+  register('sync:status:get', () => syncManager.getStatus())
+  register('sync:configure', (_event, config, token) => syncManager.configure(config || {}, token || ''))
+  register('sync:run', () => syncManager.syncNow())
+  register('sync:reset', () => syncManager.resetCursor())
 
   register('update:check', () => app.isPackaged ? autoUpdater.checkForUpdates() : ({ development: true }))
   register('update:download', () => autoUpdater.downloadUpdate())

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">OpenStarry</string>
+    <string name="title_activity_main">OpenStarry</string>
+    <string name="package_name">com.tomysh.openstarry.mobile</string>
+    <string name="custom_url_scheme">com.tomysh.openstarry.mobile</string>
+</resources>

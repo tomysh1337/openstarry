@@ -1,0 +1,45 @@
+services:
+  sync-server:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      OPENSTARRY_SYNC_DATA: /data
+    volumes:
+      - sync-data:/data
+    networks:
+      - sync-network
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      - sync-server
+      - mobile-web
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./downloads:/downloads:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - sync-network
+
+  mobile-web:
+    build:
+      context: ../../MOBILE/openstarry-mobile
+    restart: unless-stopped
+    networks:
+      - sync-network
+
+networks:
+  sync-network:
+
+volumes:
+  sync-data:
+  caddy-data:
+  caddy-config:

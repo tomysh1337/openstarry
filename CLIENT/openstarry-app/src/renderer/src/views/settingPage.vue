@@ -121,6 +121,53 @@
             </div>
           </div>
 
+          <div class="setting-card sync-setting-card">
+            <div class="setting-title">跨设备聊天同步</div>
+            <div class="sync-form">
+              <div class="setting-info">
+                会话、消息和附件通过 HTTPS 增量同步；离线时保留压缩队列，恢复网络后自动续传。
+              </div>
+              <div class="sync-row">
+                <el-switch v-model="desktopSettings.sync.enabled" />
+                <el-input
+                  v-model="desktopSettings.sync.serverUrl"
+                  placeholder="https://同步服务器"
+                  class="sync-url-input"
+                />
+                <el-input
+                  v-model="desktopSettings.sync.userId"
+                  placeholder="用户 ID"
+                  class="sync-user-input"
+                />
+              </div>
+              <div class="sync-row">
+                <el-input
+                  v-model="syncToken"
+                  type="password"
+                  show-password
+                  :placeholder="syncStatus.credentialStored ? '访问令牌已安全保存' : '访问令牌'"
+                  class="sync-token-input"
+                />
+                <span class="setting-info">间隔（分钟）</span>
+                <el-input-number
+                  v-model="desktopSettings.sync.intervalMinutes"
+                  :min="1"
+                  :max="1440"
+                  controls-position="right"
+                />
+              </div>
+              <div class="sync-row">
+                <el-button type="primary" @click="saveSyncSettings">保存并同步</el-button>
+                <el-button @click="runCloudSync">立即同步</el-button>
+                <el-button @click="resetCloudSync">重新全量核对</el-button>
+                <span class="setting-info" :class="{ danger_info: syncStatus.phase === 'offline' }">
+                  {{ syncStatus.message }}
+                  <template v-if="syncStatus.queued">（待同步 {{ syncStatus.queued }} 项）</template>
+                </span>
+              </div>
+            </div>
+          </div>
+
           <div class="setting-card">
             <div class="setting-title">组件状态</div>
             <div class="setting-control">
@@ -925,9 +972,23 @@ const desktopSettings = ref({
     maxMinutes: 120,
     repeatedErrorLimit: 3
   },
-  vault: { enabled: false, helloPreferred: true, masterPasswordFallback: false }
+  vault: { enabled: false, helloPreferred: true, masterPasswordFallback: false },
+  sync: {
+    enabled: false,
+    serverUrl: 'https://openstarry.154-219-110-177.sslip.io',
+    userId: 'tomysh',
+    intervalMinutes: 5
+  }
 })
 const runtimeStatus = ref({ phase: 'starting', message: '正在初始化' })
+const syncToken = ref('')
+const syncStatus = ref({
+  phase: 'idle',
+  message: '云端同步未启用',
+  queued: 0,
+  credentialStored: false
+})
+let unsubscribeSyncStatus = null
 
 /* Layout */
 const pageHeight = ref(window.innerHeight - 30)
@@ -942,14 +1003,21 @@ onMounted(async () => {
   showPage.value = true
   desktopSettings.value = await window.api.system.getSettings()
   runtimeStatus.value = await window.api.system.runtimeStatus()
+  syncStatus.value = await window.api.system.syncStatus()
+  unsubscribeSyncStatus = window.api.system.onSyncStatus((status) => {
+    syncStatus.value = status
+  })
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updatePageHeight)
+  unsubscribeSyncStatus?.()
 })
 
 const saveDesktopSettings = async () => {
-  desktopSettings.value = await window.api.system.updateSettings(desktopSettings.value)
+  const desktopOnlySettings = structuredClone(desktopSettings.value)
+  delete desktopOnlySettings.sync
+  desktopSettings.value = await window.api.system.updateSettings(desktopOnlySettings)
   ElMessage.success('设置已保存')
 }
 
@@ -972,13 +1040,48 @@ const restoreLocalData = async () => {
 
 const openDiagnostics = () => window.api.system.showLogs()
 
+const saveSyncSettings = async () => {
+  try {
+    syncStatus.value = await window.api.system.configureSync(
+      desktopSettings.value.sync,
+      syncToken.value
+    )
+    syncToken.value = ''
+    ElMessage.success('同步设置已保存')
+    if (desktopSettings.value.sync.enabled) await runCloudSync()
+  } catch (error) {
+    ElMessage.error(error?.message || '同步设置保存失败')
+  }
+}
+
+const runCloudSync = async () => {
+  try {
+    syncStatus.value = await window.api.system.runSync()
+    ElMessage.success('聊天记录同步完成')
+  } catch (error) {
+    ElMessage.warning(error?.message || '当前网络不可用，稍后将自动重试')
+  }
+}
+
+const resetCloudSync = async () => {
+  try {
+    await ConfirmDialog.confirm(
+      '下次同步会重新核对全部聊天和附件，本地数据不会被清除。是否继续？',
+      '重新全量核对',
+      { confirmButtonText: '继续', cancelButtonText: '取消', type: 'warning' }
+    )
+    syncStatus.value = await window.api.system.resetSync()
+    await runCloudSync()
+  } catch {}
+}
+
 const retryComponents = async () => {
   runtimeStatus.value = { phase: 'starting', message: '正在重新初始化' }
   try {
     runtimeStatus.value = await window.api.system.retryRuntime()
     ElMessage.success('组件已恢复')
   } catch (error) {
-    runtimeStatus.value = { phase: 'error', message: (error as Error).message }
+    runtimeStatus.value = { phase: 'error', message: error?.message || '组件恢复失败' }
     ElMessage.error('组件恢复失败')
   }
 }
@@ -1326,6 +1429,40 @@ span.el-popper__arrow {
 .setting-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--OpenStarry-shadow-layer-3);
+}
+
+.sync-setting-card {
+  height: auto;
+  min-height: 156px;
+}
+
+.sync-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.sync-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.sync-url-input {
+  min-width: 280px;
+  flex: 1;
+}
+
+.sync-user-input {
+  width: 150px;
+}
+
+.sync-token-input {
+  min-width: 260px;
+  flex: 1;
 }
 
 .setting-label {
