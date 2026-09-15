@@ -1,7 +1,4 @@
-import { Worker } from 'worker_threads'
-
-import fsWatcherWorker
-from './workers/FsWatcherWorker.js?raw'
+import createFsWatcherWorker from './workers/FsWatcherWorker.js?nodeWorker'
 
 export class FileSystemManager {
 
@@ -18,12 +15,7 @@ export class FileSystemManager {
             new Map()
 
         // Create worker
-        this.worker = new Worker(
-            fsWatcherWorker,
-            {
-                eval: true
-            }
-        )
+        this.worker = createFsWatcherWorker()
 
         // Worker messages
         this.worker.on(
@@ -43,6 +35,11 @@ export class FileSystemManager {
                     '[FS Worker Crash]',
                     err
                 )
+
+                for (const pending of this.pendingRequests.values()) {
+                    pending.reject(err)
+                }
+                this.pendingRequests.clear()
             }
         )
     }

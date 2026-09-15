@@ -6,13 +6,13 @@ OpenStarry NextGen 是一款面向 Windows 10、Windows 11 和 Android 的本地
 
 请从 [GitHub Releases](https://github.com/tomysh1337/openstarry/releases) 下载最新版本：
 
-- `OpenStarry-NextGen-1.1.0-Setup.exe`：Windows 安装版，可选择安装目录。
-- `OpenStarry-NextGen-1.1.0-Portable.exe`：Windows 便携版。
-- `OpenStarry-Mobile-1.1.0.apk`：Android 6.0 及以上版本。
+- `OpenStarry-NextGen-1.1.1-Setup.exe`：Windows 安装版，可选择安装目录。
+- `OpenStarry-NextGen-1.1.1-Portable.exe`：Windows 便携版。
+- `OpenStarry-Mobile-1.1.1.apk`：Android 6.0 及以上版本。
 
 也可以直接打开 [OpenStarry 移动网页版](https://openstarry.154-219-110-177.sslip.io)。移动端输入同步用户 ID 和访问令牌后，会把会话与消息保存在设备的离线缓存中。
 
-首次启动 Windows 客户端会准备 AI 运行环境，所需时间取决于网络与电脑性能。窗口关闭后默认缩小到系统托盘，可在设置中改为直接退出。
+首次启动 Windows 客户端会准备 AI 运行环境，所需时间取决于网络与电脑性能；后续启动会直接复用已安装环境。窗口关闭后默认缩小到系统托盘，可在设置中改为直接退出。
 
 ## 主要功能
 

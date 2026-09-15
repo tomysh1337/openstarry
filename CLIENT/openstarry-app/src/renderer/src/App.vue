@@ -39,7 +39,7 @@
           </el-header>
 
           <el-main class="main-window">
-            <div v-show="!isResizing">
+            <div v-if="runtimeStatus.phase === 'ready'" v-show="!isResizing">
               <router-view v-slot="{ Component }">
                 <keep-alive>
                   <component :is="Component" />

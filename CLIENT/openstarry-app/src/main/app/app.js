@@ -97,6 +97,24 @@ export function createMainWindow({ settingsStore, isQuitting = () => false, onWi
   let mainWindow = createAppWindow()
   onWindowChanged(mainWindow)
 
+  mainWindow.webContents.on('did-fail-load', (_, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3) return
+    console.error('[Renderer load failed]', { errorCode, errorDescription, validatedURL })
+    const errorPage = `<meta charset="utf-8"><title>OpenStarry NextGen</title><body style="margin:0;min-height:100vh;display:grid;place-content:center;font-family:system-ui;background:#f6f7fb;color:#20222a;text-align:center"><h1>OpenStarry NextGen 启动遇到问题</h1><p>界面加载失败（${errorCode}）：${errorDescription}</p></body>`
+    mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(errorPage)}`)
+  })
+  mainWindow.webContents.on('render-process-gone', (_, details) => {
+    console.error('[Renderer process gone]', details)
+  })
+  mainWindow.webContents.on('preload-error', (_, preloadPath, error) => {
+    console.error('[Preload error]', preloadPath, error)
+  })
+  mainWindow.webContents.on('console-message', (details) => {
+    if (['warning', 'error'].includes(details.level)) {
+      console.warn(`[Renderer ${details.level}] ${details.message} (${details.sourceId}:${details.lineNumber})`)
+    }
+  })
+
   // ---------- Window event bindings ----------
   registerWindowIpc(mainWindow, settingsStore)
   registerFileIpc(mainWindow)

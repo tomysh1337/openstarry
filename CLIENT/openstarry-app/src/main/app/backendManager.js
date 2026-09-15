@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { EventEmitter } from 'events'
-import { createWriteStream, existsSync, mkdirSync } from 'fs'
+import { createHash } from 'crypto'
+import { createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
 import { spawn } from 'child_process'
 import { createDataDirectories } from './settingsStore'
@@ -100,9 +101,68 @@ export class BackendManager extends EventEmitter {
     }
   }
 
+  _componentEnvironment(spec) {
+    return join(this.paths.components, 'python', spec.id)
+  }
+
+  _dependencyFingerprint(sourceDirectory) {
+    const hash = createHash('sha256')
+    let dependencyFileCount = 0
+
+    for (const fileName of ['pyproject.toml', 'uv.lock']) {
+      const filePath = join(sourceDirectory, fileName)
+      if (!existsSync(filePath)) continue
+      hash.update(fileName)
+      hash.update(readFileSync(filePath))
+      dependencyFileCount += 1
+    }
+
+    if (dependencyFileCount === 0) {
+      throw new Error(`组件依赖清单缺失：${sourceDirectory}`)
+    }
+
+    return hash.digest('hex')
+  }
+
+  _preparationMarker(spec) {
+    return join(this._componentEnvironment(spec), '.openstarry-runtime.json')
+  }
+
+  _preparedPython(spec, sourceDirectory) {
+    const pythonExecutable = join(this._componentEnvironment(spec), 'Scripts', 'python.exe')
+    const markerPath = this._preparationMarker(spec)
+    if (!existsSync(pythonExecutable) || !existsSync(markerPath)) return null
+
+    try {
+      const marker = JSON.parse(readFileSync(markerPath, 'utf8'))
+      return marker.schema === 1 && marker.fingerprint === this._dependencyFingerprint(sourceDirectory)
+        ? pythonExecutable
+        : null
+    } catch {
+      return null
+    }
+  }
+
+  _recordPreparation(spec, sourceDirectory) {
+    const markerPath = this._preparationMarker(spec)
+    const temporaryPath = `${markerPath}.tmp`
+    writeFileSync(temporaryPath, JSON.stringify({
+      schema: 1,
+      fingerprint: this._dependencyFingerprint(sourceDirectory),
+      preparedAt: new Date().toISOString()
+    }))
+    renameSync(temporaryPath, markerPath)
+  }
+
   async _runPreparation(spec, sourceDirectory) {
     const developmentPython = join(sourceDirectory, '.venv', 'Scripts', 'python.exe')
     if (!app.isPackaged && existsSync(developmentPython)) return developmentPython
+
+    const preparedPython = this._preparedPython(spec, sourceDirectory)
+    if (preparedPython) {
+      this._setStatus({ message: `${spec.label}组件已安装，正在启动…` })
+      return preparedPython
+    }
 
     const uvExecutable = this._uvExecutable()
     if (!existsSync(uvExecutable) && app.isPackaged) {
@@ -120,6 +180,7 @@ export class BackendManager extends EventEmitter {
 
     const pythonExecutable = join(this.paths.components, 'python', spec.id, 'Scripts', 'python.exe')
     if (!existsSync(pythonExecutable)) throw new Error(`${spec.label}组件准备失败`)
+    this._recordPreparation(spec, sourceDirectory)
     return pythonExecutable
   }
 
@@ -203,7 +264,7 @@ export class BackendManager extends EventEmitter {
         this._setStatus({ modules: { [spec.id]: 'ready' }, progress: 15 + index * 20 })
         continue
       }
-      this._setStatus({ message: `正在准备${spec.label}`, modules: { [spec.id]: 'preparing' } })
+      this._setStatus({ message: `正在检查${spec.label}组件`, modules: { [spec.id]: 'preparing' } })
       const sourceDirectory = this._sourceDirectory(spec)
       const pythonExecutable = await this._runPreparation(spec, sourceDirectory)
       await this._launch(spec, pythonExecutable, sourceDirectory)
