@@ -363,17 +363,25 @@ export class SyncManager extends EventEmitter {
             operations: outgoing.map(networkOperation)
           })
         })
-        const acknowledged = new Set(response.acknowledgedIds || [])
+        const outgoingIds = new Set(outgoing.map((operation) => operation.opId))
+        const acknowledged = new Set(
+          (response.acknowledgedIds || []).filter((operationId) => outgoingIds.has(operationId))
+        )
         queue = queue.filter((operation) => !acknowledged.has(operation.opId))
         uploaded += acknowledged.size
         downloaded += await this._applyRemote(response.records || [], config, headers)
-        state.cursor = Number(response.cursor) || state.cursor
+        const previousCursor = state.cursor
+        const responseCursor = Number(response.cursor)
+        if (Number.isFinite(responseCursor) && responseCursor >= 0) state.cursor = responseCursor
         hasMore = Boolean(response.hasMore)
         this._writeQueue(queue)
         this._writeState(state)
         if (!outgoing.length && !hasMore) break
         if (outgoing.length && !acknowledged.size) {
           throw new Error('服务器未确认本次同步记录')
+        }
+        if (hasMore && state.cursor === previousCursor) {
+          throw new Error('服务器同步游标未推进')
         }
       }
 

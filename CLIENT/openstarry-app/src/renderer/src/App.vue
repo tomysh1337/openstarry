@@ -132,10 +132,18 @@ function handleWindowResize() {
 
 onMounted(async () => {
   window.addEventListener('resize', handleWindowResize)
-  runtimeStatus.value = await window.api.system.runtimeStatus()
+
+  let runtimeEventSeen = false
   subscriptions.push(window.api.system.onRuntimeStatus((status) => {
+    runtimeEventSeen = true
     runtimeStatus.value = status
   }))
+
+  const initialRuntimeStatus = await window.api.system.runtimeStatus()
+  if (!runtimeEventSeen) {
+    runtimeStatus.value = initialRuntimeStatus
+  }
+
   subscriptions.push(window.api.system.onComputerApproval(async (request) => {
     try {
       await ConfirmDialog.confirm(

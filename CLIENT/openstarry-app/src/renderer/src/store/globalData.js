@@ -2,7 +2,7 @@ import { reactive, ref } from 'vue'
 import darkCss from 'highlight.js/styles/atom-one-dark.css?url'
 import lightCss from 'highlight.js/styles/github.css?url'
 
-export const OpenStarry_client_version = '1.1.1'
+export const OpenStarry_client_version = '1.1.2'
 
 export function genUUID() {
   return crypto.randomUUID()

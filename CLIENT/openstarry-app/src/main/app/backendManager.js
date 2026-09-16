@@ -255,6 +255,19 @@ export class BackendManager extends EventEmitter {
   }
 
   async start() {
+    try {
+      return await this._start()
+    } catch (error) {
+      this._setStatus({
+        phase: 'error',
+        message: error?.message || 'OpenStarry NextGen 初始化失败',
+        progress: 0
+      })
+      throw error
+    }
+  }
+
+  async _start() {
     this.stopping = false
     this.restartCounts.clear()
     this._setStatus({ phase: 'starting', message: '正在初始化 OpenStarry NextGen', progress: 2 })

@@ -1003,10 +1003,17 @@ onMounted(async () => {
   showPage.value = true
   desktopSettings.value = await window.api.system.getSettings()
   runtimeStatus.value = await window.api.system.runtimeStatus()
-  syncStatus.value = await window.api.system.syncStatus()
+
+  let syncEventSeen = false
   unsubscribeSyncStatus = window.api.system.onSyncStatus((status) => {
+    syncEventSeen = true
     syncStatus.value = status
   })
+
+  const initialSyncStatus = await window.api.system.syncStatus()
+  if (!syncEventSeen) {
+    syncStatus.value = initialSyncStatus
+  }
 })
 
 onBeforeUnmount(() => {

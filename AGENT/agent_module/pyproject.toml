@@ -7,7 +7,7 @@ requires-python = ">=3.11"
 dependencies = [
     "aiohttp>=3.13.5",
     "beautifulsoup4>=4.14.2",
-    "chardet>=6.0.0.post1",
+    "chardet>=5.2,<6",
     "charset-normalizer>=3.4.4",
     "crawl4ai>=0.8.6",
     "croniter>=6.2.4",

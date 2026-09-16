@@ -10,6 +10,7 @@ const ALLOWED_ACTIONS = new Set([
   'activate_window', 'click', 'press_key', 'type_text', 'scroll', 'set_value',
   'drag', 'perform_secondary_action'
 ])
+const MAX_REQUEST_BYTES = 1024 * 1024
 
 export class ComputerUseManager extends EventEmitter {
   constructor(settingsStore, bridgeToken) {
@@ -19,11 +20,50 @@ export class ComputerUseManager extends EventEmitter {
     this.server = null
     this.pendingApprovals = new Map()
     this.sky = null
+    this.skyPromise = null
+  }
+
+  _configureApprovalBridge() {
     globalThis.nodeRepl = globalThis.nodeRepl || {}
     globalThis.nodeRepl.config = {
       ...(globalThis.nodeRepl.config || {}),
       createElicitation: (request) => this._approveApplication(request)
     }
+  }
+
+  async _loadSky() {
+    if (this.sky) return this.sky
+    if (!this.skyPromise) {
+      this.skyPromise = (async () => {
+        const previousNodeRepl = globalThis.nodeRepl
+        Reflect.deleteProperty(globalThis, 'nodeRepl')
+        try {
+          const module = app.isPackaged
+            ? await import(pathToFileURL(join(
+                process.resourcesPath,
+                'computer-use',
+                'node_modules',
+                '@oai',
+                'sky',
+                'dist',
+                'project',
+                'cua',
+                'sky_js',
+                'src',
+                'index.js'
+              )).href)
+            : await import('@oai/sky')
+          return module.sky
+        } finally {
+          if (previousNodeRepl) globalThis.nodeRepl = previousNodeRepl
+          this._configureApprovalBridge()
+        }
+      })().finally(() => {
+        this.skyPromise = null
+      })
+    }
+    this.sky = await this.skyPromise
+    return this.sky
   }
 
   async _approveApplication(request) {
@@ -69,25 +109,8 @@ export class ComputerUseManager extends EventEmitter {
     }
     this.emit('active', { active: true, action })
     try {
-      if (!this.sky) {
-        const module = app.isPackaged
-          ? await import(pathToFileURL(join(
-              process.resourcesPath,
-              'computer-use',
-              'node_modules',
-              '@oai',
-              'sky',
-              'dist',
-              'project',
-              'cua',
-              'sky_js',
-              'src',
-              'index.js'
-            )).href)
-          : await import('@oai/sky')
-        this.sky = module.sky
-      }
-      const method = this.sky[action]
+      const sky = await this._loadSky()
+      const method = sky[action]
       if (typeof method !== 'function') throw new Error(`Computer action unavailable: ${action}`)
       return await method(args)
     } finally {
@@ -97,7 +120,7 @@ export class ComputerUseManager extends EventEmitter {
 
   startBridge() {
     if (this.server) return
-    this.server = createServer(async (request, response) => {
+    const server = createServer(async (request, response) => {
       if (request.socket.remoteAddress !== '127.0.0.1' && request.socket.remoteAddress !== '::1') {
         response.writeHead(403).end()
         return
@@ -112,7 +135,15 @@ export class ComputerUseManager extends EventEmitter {
       }
       try {
         const chunks = []
-        for await (const chunk of request) chunks.push(chunk)
+        let receivedBytes = 0
+        for await (const chunk of request) {
+          receivedBytes += chunk.length
+          if (receivedBytes > MAX_REQUEST_BYTES) {
+            response.writeHead(413).end()
+            return
+          }
+          chunks.push(chunk)
+        }
         const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
         const result = await this.perform(body.action, body.args, body.options)
         response.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
@@ -122,10 +153,17 @@ export class ComputerUseManager extends EventEmitter {
         response.end(JSON.stringify({ success: false, error: error.message }))
       }
     })
-    this.server.listen(5095, '127.0.0.1')
+    this.server = server
+    server.once('error', (error) => {
+      console.error('Computer bridge failed:', error)
+      if (this.server === server) this.server = null
+    })
+    server.listen(5095, '127.0.0.1')
   }
 
   async stop() {
+    for (const resolver of this.pendingApprovals.values()) resolver(false)
+    this.pendingApprovals.clear()
     if (this.server) await new Promise((resolve) => this.server.close(resolve))
     this.server = null
     if (typeof this.sky?.close === 'function') await this.sky.close()
