@@ -1,4 +1,4 @@
-import { app, dialog, ipcMain, shell } from 'electron'
+import { app, dialog, ipcMain, shell, Notification } from 'electron'
 import { join } from 'path'
 
 function register(channel, handler) {
@@ -18,7 +18,25 @@ export function registerSystemIpc({
   getMainWindow,
   requestQuit
 }) {
-  register('system:info', () => ({
+  const questionNotifications = new Map()
+  register('question:notify', (_event, value) => {
+    const id = String(value?.id || '')
+    if (!id || questionNotifications.has(id)) return false
+    if (!Notification.isSupported()) return false
+    const notification = new Notification({ title: 'OpenStarry NextGen 需要你回答', body: String(value.question || '请返回聊天确认项目需求').slice(0, 160), silent: false })
+    questionNotifications.set(id, notification)
+    if (questionNotifications.size > 100) questionNotifications.delete(questionNotifications.keys().next().value)
+    notification.on('click', () => {
+      const window = getMainWindow()
+      if (!window || window.isDestroyed()) return
+      if (window.isMinimized()) window.restore()
+      window.show(); window.focus()
+      window.webContents.send('question:focus', { historyId: String(value.historyId || '') })
+    })
+    notification.show()
+    return true
+  })
+  register('system:info' , () => ({
     name: 'OpenStarry NextGen',
     version: app.getVersion(),
     publisher: 'tomysh',
@@ -72,6 +90,7 @@ export function registerSystemIpc({
 
   register('sync:status:get', () => syncManager.getStatus())
   register('sync:configure', (_event, config, token) => syncManager.configure(config || {}, token || ''))
+  register('sync:preferences', (_event, values) => syncManager.sharedPreferences(values || {}))
   register('sync:run', () => syncManager.syncNow())
   register('sync:reset', () => syncManager.resetCursor())
 

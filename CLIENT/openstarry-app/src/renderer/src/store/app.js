@@ -1,3 +1,4 @@
+import { queuePreference } from './sharedPreferences.js'
 import { defineStore } from "pinia"
 import { toRaw, isRef, unref } from 'vue'
 import { setHighlightTheme } from './globalData'
@@ -243,13 +244,14 @@ export const useAppCacheData = defineStore("app", {
       this.applyTheme()
     },
 
-    saveAppConfig(key, value) {
+    saveAppConfig(key, value, fromSync = false) {
       try {
         const rawValue = isRef(value)
           ? unref(value)
           : value
 
         this.config[key] = rawValue
+        if (!fromSync) queuePreference(key, rawValue)
 
         localStorage.setItem(
           key,

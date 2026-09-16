@@ -161,6 +161,11 @@
               </div>
             </Transition>
 
+            <Transition name="question-presence">
+            <QuestionDock v-if="pendingQuestion" :key="pendingQuestion.questions.qid"
+              :questions="pendingQuestion.questions.questions" :qid="pendingQuestion.questions.qid"
+              :on-answer="(qid, answers) => handleCompleteQuestions(pendingQuestion.id, qid, answers)" />
+            </Transition>
             <div class="input-bar">
               <el-input
                 v-model="inputText"
@@ -193,7 +198,8 @@
                 <el-button
                   class="apikey-button"
                   :class="{ errorKey: !store.config.apiKey }"
-                  @click="editApiKey"
+                  @click="providerEditor.open()"
+                  title="供应商与模型设置" aria-label="供应商与模型设置"
                 >
                   <svg t="1773422089722" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="16943" width="200" height="200"><path d="M682.666667 256a256 256 0 1 1-216.490667 392.704L460.928 640H230.997333a42.666667 42.666667 0 0 1-25.941333-8.789333l-4.224-3.712-85.333333-85.333334a42.666667 42.666667 0 0 1-3.541334-56.32l3.541334-4.010666 85.290666-85.333334a42.666667 42.666667 0 0 1 24.576-12.117333L230.954667 384h229.973333A255.914667 255.914667 0 0 1 682.666667 256z m0 64a191.914667 191.914667 0 0 0-166.357334 96.042667 64 64 0 0 1-55.381333 31.957333H239.786667L175.829333 512l64 64h221.098667a64 64 0 0 1 55.381333 31.957333A192 192 0 1 0 682.666667 320z" :fill="store.config.apiKey?'var(--OpenStarry-tertiary-dark-color)':'var(--OpenStarry-input-error-border)'" p-id="16944"></path><path d="M682.666667 426.666667a85.333333 85.333333 0 1 1 0 170.666666 85.333333 85.333333 0 0 1 0-170.666666z m0 64a21.333333 21.333333 0 1 0 0 42.666666 21.333333 21.333333 0 0 0 0-42.666666z" :fill="store.config.apiKey?'var(--OpenStarry-tertiary-dark-color)':'var(--OpenStarry-input-error-border)'" p-id="16945"></path></svg>
                 </el-button>
@@ -201,6 +207,7 @@
                 <n-select
                   v-model:value="store.config.modelName"
                   :options="modelSelectOptions"
+                  filterable tag
                   class="model-select"
                   :class="{ errorServer: errorServer }"
                   :consistent-menu-width="false"
@@ -280,9 +287,13 @@
       </div>
     </el-main>
   </el-container>
+  <ChatProviderSettings ref="providerEditor" @saved="fetchModels(store.config.modelProvider, store.config.apiKey)" />
 </template>
 
 <script setup lang="ts">
+import QuestionDock from './component/comp/QuestionDock.vue'
+import ChatProviderSettings from './component/provider_card/ChatProviderSettings.vue'
+const providerEditor = ref(null)
 import { ref, nextTick, reactive, watch, onMounted, onBeforeUnmount, h, computed, toRaw, onActivated, onDeactivated } from 'vue'
 import type { TagProps } from 'element-plus'
 import HomePage from './homePage.vue'
@@ -292,8 +303,9 @@ import ChatHistoryPanel from './component/dialog_history/history_panel.vue'
 import { type ChatHistory } from './component/dialog_history/history_card.vue'
 import { useAppCacheData, currentConfigSet } from '../store/app'
 import { useAuthStore } from '../store/auth'
-import { messageCache, generatingState, loadingHistorySet, loadedHistorySet, historyList, globalDataLock } from '../store/globalData.js'
+import { messageCache, generatingState, loadingHistorySet, loadedHistorySet, historyList, globalDataLock, syncRevision } from '../store/globalData.js'
 import { ElMessage } from 'element-plus'
+import { isApplyingPreferences } from '../store/sharedPreferences.js'
 import { NAvatar, NSelect } from 'naive-ui'
 import { InputDialog } from './component/comp/inputDialog'
 import { ConfirmDialog } from './component/comp/confirmDialog.js'
@@ -911,7 +923,7 @@ async function loadHistoryMessages(hid: string, force = false) {
   try {
     const res = await window.api.getChatMsgs(cid.value, sid.value, hid)
     const raw = res?.messages
-    if (!Array.isArray(raw)) return
+    if (!Array.isArray(raw) || generatingState[hid]?.isGenerating) return
 
     console.log("Get message list: ", raw)
 
@@ -1607,6 +1619,8 @@ function handleTodoChunkRtn(generationId: string, data: any, historyId: string) 
   }
 }
 
+const pendingQuestion = computed(() => messages.value.findLast(item => item.questions?.questions?.length))
+
 function handleQuestChunkRtn(generationId: string, data: any, historyId: string) {
   // console.log("Quest data: ", data)
   if (!data || !generationId) return
@@ -1626,6 +1640,7 @@ function handleQuestChunkRtn(generationId: string, data: any, historyId: string)
       questions: cloneMaybeArray(questions),
       qid: data.block_id
     }
+    window.api.system.notifyQuestion({ id: data.block_id, historyId, question: questions[0]?.question || '请回答项目需求问题' }).catch(() => {})
   }
 }
 
@@ -1879,6 +1894,7 @@ async function sendEvent(action: string, event: any) {
     await window.api.sendWsEvent(cid.value, action, event)
   } catch (err) {
     console.error('[sendEvent] Request failed', err)
+    throw err
     ElMessage({
       type: 'error',
       message: '事件发送失败',
@@ -1979,7 +1995,7 @@ function handleQuoteShow(hid: string, mid: string, role: string, content: string
   }
 }
 
-async function handleCompleteQuestions(id: string, qid: string, resp: QuestionItem) {
+async function handleCompleteQuestions(id: string, qid: string, resp: QuestionItem[]) {
   // console.log("[handleCompleteQuestions] Questions finished: ", qid, resp)
   const event = {
     client_id: cid.value,
@@ -2065,6 +2081,20 @@ onActivated(() => {
 // onDeactivated(() => {
 //   websocketGateSwitch = false
 // })
+
+watch(syncRevision, async () => {
+  if (!cid.value) return
+  try {
+    historyList.value = await get_conversation_list(cid.value)
+    const id = store.current_history_id
+    if (id && !generatingState[id]?.isGenerating) await loadHistoryMessages(id, true)
+    await fetchModels(store.config.modelProvider, store.config.apiKey)
+  } catch (error) { console.warn('Synced chat refresh failed:', error) }
+})
+onActivated(() => { fetchModels(store.config.modelProvider, store.config.apiKey) })
+watch(() => store.config.activeProvider.provider_id, () => {
+  if (store.config.modelProvider === 'custom') fetchModels('custom', store.config.apiKey)
+})
 
 onMounted(async () => {
   globalDataLock.value = "default"
@@ -2299,7 +2329,7 @@ watch(
 
     store.config.apiKey = cachedKey
 
-    store.saveAppConfig('modelName', '')
+    if (!isApplyingPreferences()) store.saveAppConfig('modelName', '')
     modelSelectOptions.value = []
 
     if (!apiKeyChanged) {
@@ -2328,7 +2358,7 @@ function ensureValidModel() {
   const current = store.config.modelName
   const isValid = options.some(opt => opt.value === current)
 
-  if (!current || !isValid) {
+  if (!current) {
     const firstValue = options[0].value
     store.saveAppConfig('modelName', firstValue)
     console.log('Use default model:', firstValue)
@@ -3838,4 +3868,7 @@ const setFullInput = () => {
 .file-tag:hover {
   transform: scale(1.02);
 }
+
+.ctrl-area > .question-dock { width: min(840px, calc(100% - 32px)); z-index: 1000; }
+.input-bar { width: min(840px, calc(100% - 32px)); box-sizing: border-box; }
 </style>

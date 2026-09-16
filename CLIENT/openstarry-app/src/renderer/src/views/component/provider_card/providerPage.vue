@@ -97,22 +97,27 @@
     v-if="dialogVisible"
     v-model="dialogVisible"
     :provider="editingProvider"
+    :saving="savingProvider"
     @save="handleSaveProvider"
   />
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import ProviderCard from './providerCard.vue'
 import ProviderEditDialog from './ProviderEditDialog.vue'
 import { useAuthStore } from '../../../store/auth'
 import { useAppCacheData } from '../../../store/app'
 import { ConfirmDialog } from '../comp/confirmDialog.js'
+import { syncRevision } from '../../../store/globalData.js'
 
 const store = useAppCacheData()
 const authStore = useAuthStore()
 const cid = ref('')
+watch(syncRevision, async () => {
+  if (cid.value) providerList.value = await getProviders(cid.value)
+})
 
 // ----------------------------------------------------------------------
 // Init
@@ -265,14 +270,14 @@ const getProviders = async (cid: string): Promise<ProviderItem[]> => {
           provider_id: sp.provider_id,
           provider_name: sp.name,
           api_key: local.api_key || '',
-          enabled: !!local.enabled,
+          enabled: sp.provider_id === store.config.activeProvider?.provider_id,
         })
       } else {
         nextLocalProviders.push({
           provider_id: sp.provider_id,
           provider_name: sp.name,
           api_key: '',
-          enabled: false,
+          enabled: sp.provider_id === store.config.activeProvider?.provider_id,
         })
       }
     }
@@ -382,6 +387,7 @@ const handleDeleteProvider = async (providerId: string) => {
 // ----------------------------------------------------------------------
 
 const dialogVisible = ref(false)
+const savingProvider = ref(false)
 const editingProvider = ref<ProviderItem | null>(null)
 
 const openProviderDialog = (providerId: string) => {
@@ -418,6 +424,8 @@ const handleSaveProvider = async (payload: {
   api_key: string
 }) => {
 
+  if (savingProvider.value) return
+  savingProvider.value = true
   try {
 
     const providerMeta = JSON.parse(JSON.stringify({
@@ -473,6 +481,7 @@ const handleSaveProvider = async (payload: {
 
     store.persistState('providers')
 
+    dialogVisible.value = false
     ElMessage({
       type: 'success',
       message: '保存成功',
@@ -489,7 +498,7 @@ const handleSaveProvider = async (payload: {
       plain: true,
     })
 
-  }
+  } finally { savingProvider.value = false }
 
 }
 
@@ -671,4 +680,9 @@ function formatTime(time: string) {
 .provider-fade-move {
   transition: transform 0.4s cubic-bezier(0.215, 0.61, 0.355, 1);
 }
+
+.main-wrapper { width: 100%; max-width: 1090px; left: auto; margin: 0 auto; box-sizing: border-box; }
+.page-title-wrapper { flex-wrap: wrap; gap: 24px; }
+.title-wrapper, .page-docs { width: auto; flex: 1 1 320px; min-width: 0; }
+.provider-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 </style>

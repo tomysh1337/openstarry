@@ -16,7 +16,7 @@ import { SyncManager } from './app/syncManager'
 import { registerSystemIpc } from './ipc/systemIpc'
 
 const localDataRoot = process.env.LOCALAPPDATA || app.getPath('appData')
-app.setPath('userData', join(localDataRoot, 'OpenStarry NextGen'))
+app.setPath('userData', process.env.OPENSTARRY_PROFILE_DIR || join(localDataRoot, 'OpenStarry NextGen'))
 app.setName('OpenStarry NextGen')
 
 log.initialize()

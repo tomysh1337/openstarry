@@ -89,6 +89,8 @@ class SyncStore:
                         "conversation",
                         "message",
                         "file",
+                        "provider",
+                        "preference",
                     }:
                         continue
                     modified_at = int(operation.get("modifiedAt") or server_time)

@@ -1,6 +1,6 @@
 # OpenStarry 同步协议 v1
 
-同步协议用于在桌面端、Android 和移动网页之间传递会话、消息、附件元数据与删除状态。服务地址必须使用 HTTPS，本机调试时允许 `http://127.0.0.1`。
+同步协议用于在桌面端、Android 和移动网页之间传递会话、消息、附件元数据、供应商、通用偏好与删除状态。服务地址必须使用 HTTPS，本机调试时允许 `http://127.0.0.1`。
 
 ## 认证
 
@@ -40,11 +40,15 @@ X-OpenStarry-Device: DEVICE_ID
 }
 ```
 
-支持三种 kind：
+支持五种 kind（供应商与偏好从客户端 1.2.0 开始使用）：
 
 - `conversation`：会话标题、置顶状态、工作区、最后活动时间和消息游标。
 - `message`：会话 ID、稳定的 `sync_id`、角色、正文、思考内容、创建时间和消息游标。
 - `file`：文件 ID、文件名、大小、MIME 类型和 SHA-256。
+- `provider`：供应商 ID、名称、接口地址、协议类型、模型 ID 列表与描述，不包含 API 密钥。
+- `preference`：白名单内的主题、温度、模型、供应商选择、角色提示词和思考偏好；不包含凭据或电脑权限。
+
+聊天 `msg_timestamp` 与 `modifiedAt` 均使用 Unix 毫秒。客户端同步偏好前会过滤未知字段；供应商、通用偏好可以通过墓碑删除。
 
 硬删除会转换为 `deleted: true` 的墓碑记录，使其他设备能够同步删除状态。
 
@@ -80,4 +84,4 @@ X-OpenStarry-Device: DEVICE_ID
 
 ## 本地保留
 
-桌面端将同步游标和记录摘要保存在 `sync-state.json`，未发送操作保存在最高压缩级别的 `sync-queue.json.gz`。同步失败只更新状态并安排指数重试，不清除本地聊天。Android 与 PWA 使用 IndexedDB 保存记录，并在退出时提供本地清理。
+桌面端将同步游标和记录摘要保存在 `sync-state.json`，未发送操作保存在最高压缩级别的 `sync-queue.json.gz`。同步失败只更新状态并安排指数重试，不清除本地聊天。Android 与 PWA 使用 IndexedDB 保存记录，断开同步保留本机记录，切换账号隔离缓存。

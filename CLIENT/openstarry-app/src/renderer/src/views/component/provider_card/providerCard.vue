@@ -20,7 +20,7 @@
 
         <button
           class="icon-btn"
-          title="Edit Provider"
+          title="编辑供应商与模型" aria-label="编辑供应商与模型"
           @click="handleEdit"
         >
           <el-icon><Setting /></el-icon>
@@ -189,7 +189,9 @@ const handleEdit = () => {
   padding: 14px 16px;
   border-radius: 12px;
   height: 250px;
-  width: 221px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 
   display: flex;
   flex-direction: column;

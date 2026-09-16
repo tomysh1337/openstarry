@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import Annotated, Literal, Optional, TypedDict
+from typing import Annotated, Literal, Optional, TypedDict, NotRequired
 
 from langchain.tools import tool, InjectedToolCallId
 from langgraph.prebuilt import InjectedState
@@ -15,6 +15,7 @@ class Question(TypedDict):
     question: str
     options: list[str]
     multiselection: Optional[bool]
+    optional: NotRequired[bool]
 
 
 @tool(description=REQUEST_USER_INPUT_PROMPT)

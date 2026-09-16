@@ -2,7 +2,7 @@ import { reactive, ref } from 'vue'
 import darkCss from 'highlight.js/styles/atom-one-dark.css?url'
 import lightCss from 'highlight.js/styles/github.css?url'
 
-export const OpenStarry_client_version = '1.1.2'
+export const OpenStarry_client_version = '1.2.0'
 
 export function genUUID() {
   return crypto.randomUUID()
@@ -45,6 +45,7 @@ export const messageCache = reactive({})
 export const generatingState = reactive({})
 export const loadedHistorySet = reactive(new Set())
 export const loadingHistorySet = reactive(new Set())
+export const syncRevision = ref(0)
 
 export const tabContentCache = {}
 

@@ -18,6 +18,7 @@
       class="menu-item"
       :show-tooltip="false"
       :title="page.title"
+      :data-route="page.path"
     >
       <el-icon>
         <component :is="page.icon" />

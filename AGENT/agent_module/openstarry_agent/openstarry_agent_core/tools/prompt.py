@@ -521,7 +521,13 @@ Do NOT use this tool when:
 
 
 REQUEST_USER_INPUT_PROMPT = """
-Request one or more answers, confirmations, selections, or decisions directly from the user
+Request one or more answers, confirmations, selections, or decisions directly from the user.
+When starting a project and requirements materially affect implementation, use this tool to show
+an interactive question card above the chat composer. Group 1–3 concise questions per call.
+Offer 2–3 useful choices with the recommended choice first and marked (推荐); free text is always supported.
+Extra comments are optional. Mark open-ended supplementary questions optional=true; never require an extra comment after an option is selected.
+Do not invent answers or silently choose an option while this tool is waiting. Continue the original task after the answer.
+Windows will notify the user automatically; no additional notification tool is needed.
 
 ## Args
 - questions (list[Question]): List of questions to send to the user

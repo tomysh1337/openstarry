@@ -74,34 +74,6 @@
           </div>
 
           <div class="setting-card">
-            <div class="setting-title">电脑控制模式</div>
-            <div class="setting-control">
-              <div class="setting-info">明确提到电脑控制或任务确有需要时，可自动操作桌面与浏览器。</div>
-              <el-select class="select-input compact-control" v-model="desktopSettings.computerControlMode" @change="saveDesktopSettings">
-                <el-option label="自动允许" value="auto" />
-                <el-option label="每次询问" value="ask" />
-                <el-option label="关闭" value="off" />
-              </el-select>
-            </div>
-          </div>
-
-          <div class="setting-card">
-            <div class="setting-title">自动续写与长任务</div>
-            <div class="setting-control">
-              <div class="setting-info">让 Agent 在工具调用后继续执行，直到任务完成或达到运行上限。</div>
-              <el-switch v-model="desktopSettings.autoContinue.enabled" @change="saveDesktopSettings" />
-            </div>
-          </div>
-
-          <div class="setting-card">
-            <div class="setting-title">不可逆操作确认</div>
-            <div class="setting-control">
-              <div class="setting-info">付款、永久删除、外部发送、账号与系统设置等操作执行前询问。</div>
-              <el-switch v-model="desktopSettings.confirmIrreversibleActions" @change="saveDesktopSettings" />
-            </div>
-          </div>
-
-          <div class="setting-card">
             <div class="setting-title">API 密钥保护</div>
             <div class="setting-control">
               <div class="setting-info">使用 Windows 凭据加密，可优先通过 Windows Hello 解锁。</div>
@@ -121,11 +93,26 @@
             </div>
           </div>
 
+          <div class="setting-card">
+            <div class="setting-title">组件状态</div>
+            <div class="setting-control">
+              <div class="setting-info">{{ runtimeStatus.message || '正在读取状态' }}</div>
+              <div class="button-row">
+                <el-button @click="openDiagnostics">诊断</el-button>
+                <el-button @click="retryComponents">重试</el-button>
+                <el-button @click="checkUpdates">检查更新</el-button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="group-divider"><span class="group-label">手机与跨设备同步</span></div>
           <div class="setting-card sync-setting-card">
             <div class="setting-title">跨设备聊天同步</div>
             <div class="sync-form">
               <div class="setting-info">
-                会话、消息和附件通过 HTTPS 增量同步；离线时保留压缩队列，恢复网络后自动续传。
+                手机和电脑互通聊天、供应商、模型与通用偏好。API 密钥各设备单独保存；离线记录会在联网后续传。
               </div>
               <div class="sync-row">
                 <el-switch v-model="desktopSettings.sync.enabled" />
@@ -168,17 +155,6 @@
             </div>
           </div>
 
-          <div class="setting-card">
-            <div class="setting-title">组件状态</div>
-            <div class="setting-control">
-              <div class="setting-info">{{ runtimeStatus.message || '正在读取状态' }}</div>
-              <div class="button-row">
-                <el-button @click="openDiagnostics">诊断</el-button>
-                <el-button @click="retryComponents">重试</el-button>
-                <el-button @click="checkUpdates">检查更新</el-button>
-              </div>
-            </div>
-          </div>
         </div>
 
         <!-- 组1: 界面设置 -->
@@ -340,8 +316,37 @@
         <!-- 组4: AI设置 -->
         <div class="setting-group">
           <div class="group-divider">
-            <span class="group-label">权限设置</span>
+            <span class="group-label">Agent 设置</span>
           </div>
+          <div class="setting-card">
+            <div class="setting-title">电脑控制模式</div>
+            <div class="setting-control">
+              <div class="setting-info">明确提到电脑控制或任务确有需要时，可自动操作桌面与浏览器。</div>
+              <el-select class="select-input compact-control" v-model="desktopSettings.computerControlMode" @change="saveDesktopSettings">
+                <el-option label="自动允许" value="auto" />
+                <el-option label="每次询问" value="ask" />
+                <el-option label="关闭" value="off" />
+              </el-select>
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-title">自动续写与长任务</div>
+            <div class="setting-control">
+              <div class="setting-info">让 Agent 在工具调用后继续执行，直到任务完成或达到运行上限。</div>
+              <el-switch v-model="desktopSettings.autoContinue.enabled" @change="saveDesktopSettings" />
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-title">不可逆操作确认</div>
+            <div class="setting-control">
+              <div class="setting-info">付款、永久删除、外部发送、账号与系统设置等操作执行前询问。</div>
+              <el-switch v-model="desktopSettings.confirmIrreversibleActions" @change="saveDesktopSettings" />
+            </div>
+          </div>
+
+
           <div class="setting-card">
             <div class="setting-title">允许 Agent 操作文件</div>
             <div class="setting-control">
@@ -1022,7 +1027,7 @@ onBeforeUnmount(() => {
 })
 
 const saveDesktopSettings = async () => {
-  const desktopOnlySettings = structuredClone(desktopSettings.value)
+  const desktopOnlySettings = JSON.parse(JSON.stringify(desktopSettings.value))
   delete desktopOnlySettings.sync
   desktopSettings.value = await window.api.system.updateSettings(desktopOnlySettings)
   ElMessage.success('设置已保存')
@@ -1050,7 +1055,7 @@ const openDiagnostics = () => window.api.system.showLogs()
 const saveSyncSettings = async () => {
   try {
     syncStatus.value = await window.api.system.configureSync(
-      desktopSettings.value.sync,
+      JSON.parse(JSON.stringify(desktopSettings.value.sync)),
       syncToken.value
     )
     syncToken.value = ''
@@ -1363,7 +1368,8 @@ span.el-popper__arrow {
   display: flex;
   flex-direction: column;
   align-items: center;
-  overflow: scroll;
+  overflow: auto;
+  overscroll-behavior: contain;
   max-height: calc(100vh - 32px - 36px);
 }
 
@@ -1384,14 +1390,16 @@ span.el-popper__arrow {
   flex-direction: column;
   gap: 24px;
   background: transparent;
-  width: 1000px;
-  max-width: 1200px;
+  width: 100%;
+  max-width: 1064px;
+  box-sizing: border-box;
 }
 
 .setting-group {
   display: grid;
   width: 100%;
-  grid-template-columns: 50% 50%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 18px;
   width: 100%;
   padding-top: 8px;
@@ -1423,7 +1431,9 @@ span.el-popper__arrow {
   position: relative;
   padding: 16px 18px;
   border-radius: var(--OpenStarry-border-radius-base);
-  height: 64px;
+  min-height: 108px;
+  min-width: 0;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1439,6 +1449,7 @@ span.el-popper__arrow {
 }
 
 .sync-setting-card {
+  grid-column: 1 / -1;
   height: auto;
   min-height: 156px;
 }
@@ -1504,7 +1515,9 @@ span.el-popper__arrow {
   flex-direction: row;
   align-items: center;
   gap: 16px;
-  width: calc(100% - 78px);
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .setting-info {
@@ -1519,8 +1532,9 @@ span.el-popper__arrow {
 }
 
 .confirm-button {
-  position: absolute;
-  right: 14px;
+  position: static;
+  flex-shrink: 0;
+  margin-left: auto;
   width: 64px;
   color: var(--OpenStarry-primary-color);
   border: 2px solid var(--OpenStarry-primary-light);
@@ -1844,12 +1858,31 @@ span.el-popper__arrow {
   transition: all 0.3s var(--OpenStarry-cubic-bezier);
   background-color: color-mix(in srgb, var(--OpenStarry-panel-layer-5-background) 50%, transparent) !important;
 }
+
+.setting-control > .setting-info { flex: 1 1 160px; line-height: 1.65; overflow-wrap: anywhere; }
+.setting-control > .compact-control { flex: 0 1 190px; min-width: 150px; }
+.setting-control > .mode-switch, .setting-control > .el-switch { flex-shrink: 0; }
+.setting-control > .line-input, .setting-control > .number-input, .setting-control > .el-slider { flex: 1 1 180px; min-width: 0; }
+.button-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.button-row :deep(.el-button), .sync-row :deep(.el-button) { margin-left: 0; }
+.sync-form, .sync-row { min-width: 0; }
+.sync-url-input, .sync-token-input { min-width: min(260px, 100%); }
+@media (max-width: 1050px) {
+  .setting-group { grid-template-columns: minmax(0, 1fr); }
+  .app-layout { padding: 8px 4px 60px; }
+}
+
+.banner-title-wrapper { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; width: 100%; }
+.banner-title { font-size: clamp(30px, 4vw, 56px); overflow-wrap: anywhere; }
+.version-tag { position: static; }
+@media (max-width: 1050px) { .OpenStarry-banner { padding: 28px; } }
 </style>
 
 
 <style scoped>
 /* 横幅容器 - 纯净深色基底 */
 .OpenStarry-banner {
+  box-sizing: border-box;
   width: 100%;
   max-width: 900px;
   border-radius: 20px;
@@ -1899,7 +1932,7 @@ span.el-popper__arrow {
 /* 文字区域 - 移除顶部padding，与图标对齐 */
 .banner-text {
   flex: 1;
-  min-width: 300px;
+  min-width: 0;
   padding-top: 0; /* 移除8px padding */
   display: flex;
   flex-direction: column;
@@ -2029,4 +2062,22 @@ span.el-popper__arrow {
   background: linear-gradient(225deg, rgba(136, 202, 197, 0.08) 0%, transparent 60%);
   pointer-events: none;
     }
+
+.setting-control > .setting-info { flex: 1 1 160px; line-height: 1.65; overflow-wrap: anywhere; }
+.setting-control > .compact-control { flex: 0 1 190px; min-width: 150px; }
+.setting-control > .mode-switch, .setting-control > .el-switch { flex-shrink: 0; }
+.setting-control > .line-input, .setting-control > .number-input, .setting-control > .el-slider { flex: 1 1 180px; min-width: 0; }
+.button-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.button-row :deep(.el-button), .sync-row :deep(.el-button) { margin-left: 0; }
+.sync-form, .sync-row { min-width: 0; }
+.sync-url-input, .sync-token-input { min-width: min(260px, 100%); }
+@media (max-width: 1050px) {
+  .setting-group { grid-template-columns: minmax(0, 1fr); }
+  .app-layout { padding: 8px 4px 60px; }
+}
+
+.banner-title-wrapper { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; width: 100%; }
+.banner-title { font-size: clamp(30px, 4vw, 56px); overflow-wrap: anywhere; }
+.version-tag { position: static; }
+@media (max-width: 1050px) { .OpenStarry-banner { padding: 28px; } }
 </style>

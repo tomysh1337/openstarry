@@ -95,6 +95,10 @@ class MysqlService:
               user_uid TEXT NOT NULL, conversation_uid TEXT, deleted INTEGER NOT NULL DEFAULT 0,
               upload_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, deleted_at TEXT
             );
+            CREATE TABLE IF NOT EXISTS sync_preferences (
+              user_uid TEXT NOT NULL, pref_key TEXT NOT NULL, value TEXT NOT NULL,
+              PRIMARY KEY(user_uid,pref_key)
+            );
             CREATE TABLE IF NOT EXISTS llm_provider (
               provider_id TEXT PRIMARY KEY, user_uid TEXT NOT NULL, provider_name TEXT NOT NULL,
               type TEXT NOT NULL DEFAULT 'openai', endpoint TEXT NOT NULL, model_list TEXT NOT NULL DEFAULT '[]',
@@ -179,6 +183,14 @@ class MysqlService:
                     "payload": message,
                 }
             )
+        for provider in self._sqlite_rows(
+            "SELECT provider_id,provider_name,type,endpoint,model_list,description,created_at,is_deleted FROM llm_provider WHERE user_uid=?", (user_uid,)
+        ):
+            provider["model_list"] = provider["model_list"] if isinstance(provider["model_list"], list) else json.loads(provider["model_list"] or "[]")
+            records.append({"id": "provider:" + provider["provider_id"], "kind": "provider", "deleted": bool(provider["is_deleted"]), "payload": provider})
+        for row in self._sqlite_rows("SELECT pref_key,value FROM sync_preferences WHERE user_uid=?", (user_uid,)):
+            records.append({"id": "preference:" + row["pref_key"], "kind": "preference", "deleted": False,
+                            "payload": {"key": row["pref_key"], "value": json.loads(row["value"])}})
         return records
 
     @staticmethod
@@ -247,6 +259,32 @@ class MysqlService:
                         ),
                     )
                     applied += 1
+                    continue
+                if record.get("kind") == "provider":
+                    provider_id = payload.get("provider_id")
+                    if not provider_id:
+                        continue
+                    self._sqlite_conn.execute(
+                        """INSERT INTO llm_provider(provider_id,user_uid,provider_name,type,endpoint,model_list,description,is_deleted)
+                        VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(provider_id) DO UPDATE SET
+                        provider_name=excluded.provider_name,type=excluded.type,endpoint=excluded.endpoint,
+                        model_list=excluded.model_list,description=excluded.description,is_deleted=excluded.is_deleted""",
+                        (provider_id, user_uid, payload.get("provider_name") or "供应商", "openai", payload.get("endpoint") or "",
+                         json.dumps(payload.get("model_list") or [], ensure_ascii=False), payload.get("description") or "", deleted))
+                    applied += 1
+                    continue
+                if record.get("kind") == "preference":
+                    from core.domain.sync_preferences import sanitize_preference
+                    clean = sanitize_preference(payload)
+                    if deleted:
+                        self._sqlite_conn.execute("DELETE FROM sync_preferences WHERE user_uid=? AND pref_key=?", (user_uid, payload.get("key")))
+                        applied += 1
+                        continue
+                    if clean and not deleted:
+                        self._sqlite_conn.execute(
+                            "INSERT INTO sync_preferences(user_uid,pref_key,value) VALUES (?,?,?) ON CONFLICT(user_uid,pref_key) DO UPDATE SET value=excluded.value",
+                            (user_uid, clean["key"], json.dumps(clean["value"], ensure_ascii=False)))
+                        applied += 1
                     continue
                 if record.get("kind") != "message":
                     continue

@@ -173,51 +173,17 @@ export function registerAiConfigIpc() {
   })
 
   // Fetch models list for custom provider based on endpoint and api key
-  ipcMain.handle('api:auto_fetch_model_list', async (event, endpoint, api_key) => {
-    try {
-      const base = endpoint.replace(/\/+$/, '')
-      const url = `${base}/models`
-
-      const res = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          ...(api_key ? { Authorization: `Bearer ${api_key}` } : {})
-        },
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(
-          data?.error?.message ||
-          data?.detail ||
-          "Fetch models failed."
-        )
-      }
-
-      let models = []
-
-      if (Array.isArray(data)) {
-        models = data
-      } else if (Array.isArray(data.data)) {
-        models = data.data
-      } else if (Array.isArray(data.models)) {
-        models = data.models
-      } else {
-        throw new Error("Unexpected response format.")
-      }
-
-      const ids = models
-        .map((m) => m?.id || m?.name)
-        .filter((id) => typeof id === "string" && id.length > 0)
-
-      return ids
-
-    } catch (err) {
-      console.error("[ipc:auto_fetch_model_list] error:", err)
-      throw err
-    }
+  ipcMain.handle('api:auto_fetch_model_list', async (_event, endpoint, api_key) => {
+    const base = new URL(String(endpoint).replace(/\/(chat\/completions|models)\/?$/, '').replace(/\/+$/, ''))
+    if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password || base.search || base.hash) throw Error('接口地址格式错误')
+    const response = await fetch(base.href.replace(/\/+$/, '') + '/models', {
+      headers: api_key ? { Authorization: 'Bearer ' + api_key } : {}, signal: AbortSignal.timeout(20000)
+    })
+    const data = await response.json().catch(() => { throw Error('接口返回的不是 JSON，请检查 /v1 等接口路径') })
+    if (!response.ok) throw Error('获取模型失败：HTTP ' + response.status)
+    const list = Array.isArray(data) ? data : data.data || data.models
+    if (!Array.isArray(list)) throw Error('响应缺少模型列表，可手动填写模型 ID')
+    return [...new Set(list.map(item => typeof item === 'string' ? item : item?.id || item?.name).filter(id => typeof id === 'string' && id.trim()).map(id => id.trim()))]
   })
 
   ipcMain.handle('api:create_mcp_server', async (event, cid, mcp_meta) => {

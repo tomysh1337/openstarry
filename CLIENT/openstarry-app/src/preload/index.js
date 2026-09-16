@@ -197,6 +197,9 @@ const api = {
     onRetentionStatus: (callback) => subscribe('retention:status', callback),
     onComputerApproval: (callback) => subscribe('computer:approval', callback),
     onComputerActive: (callback) => subscribe('computer:active', callback),
+    notifyQuestion: (value) => ipcRenderer.invoke('question:notify', value),
+    onQuestionFocus: (callback) => subscribe('question:focus', callback),
+    sharedPreferences: (values) => ipcRenderer.invoke('sync:preferences', values),
     onSyncStatus: (callback) => subscribe('sync:status', callback),
     onUpdateStatus: (callback) => subscribe('update:status', callback)
   },

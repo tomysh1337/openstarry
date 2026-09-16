@@ -1,13 +1,14 @@
 {
   "name": "openstarry-mobile",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "android:sync": "npm run build && cap sync android",
-    "android:apk": "npm run android:sync && cd android && gradlew.bat assembleDebug"
+    "android:apk": "npm run android:sync && cd android && gradlew.bat assembleDebug",
+    "test": "node --test tests/chatSync.test.js"
   },
   "dependencies": {
     "@capacitor/core": "^7.4.3"
@@ -16,6 +17,8 @@
     "@capacitor/android": "^7.4.3",
     "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^7.4.3",
+    "@playwright/test": "^1.63.0",
+    "fake-indexeddb": "^6.2.5",
     "vite": "^7.1.7"
   }
 }

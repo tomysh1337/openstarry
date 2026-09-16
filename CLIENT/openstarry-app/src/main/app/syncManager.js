@@ -82,6 +82,7 @@ export class SyncManager extends EventEmitter {
       deviceId: state.deviceId || randomUUID(),
       cursor: Number(state.cursor) || 0,
       recordHashes: state.recordHashes || {},
+      account: state.account || '',
       lastSyncAt: state.lastSyncAt || null
     }
   }
@@ -203,6 +204,12 @@ export class SyncManager extends EventEmitter {
     return this.activeSync
   }
 
+  async sharedPreferences(values = {}) {
+    return jsonRequest(MEMORY_SYNC_URL + '/preferences', {
+      method: 'POST', body: JSON.stringify({ client_id: 'local-user', values })
+    })
+  }
+
   async _localRecords() {
     const payload = JSON.stringify({ client_id: 'local-user' })
     const [memory, files] = await Promise.all([
@@ -298,19 +305,21 @@ export class SyncManager extends EventEmitter {
   }
 
   async _applyRemote(records, config, headers) {
-    if (!records.length) return 0
-    const memory = records.filter((item) => ['conversation', 'message'].includes(item.kind))
+    if (!records.length) return { applied: 0, normalized: [] }
+    const memory = records.filter((item) => ['conversation', 'message', 'provider', 'preference'].includes(item.kind))
     const files = []
     for (const record of records.filter((item) => item.kind === 'file')) {
       files.push(await this._downloadAttachment(record, config, headers))
     }
     let applied = 0
+    const normalized = []
     if (memory.length) {
       const result = await jsonRequest(MEMORY_SYNC_URL + '/apply', {
         method: 'POST',
         body: JSON.stringify({ client_id: 'local-user', records: memory })
       })
       applied += result.applied || 0
+      normalized.push(...(result.records || memory))
     }
     if (files.length) {
       const result = await jsonRequest(FILE_SYNC_URL + '/apply', {
@@ -319,7 +328,8 @@ export class SyncManager extends EventEmitter {
       })
       applied += result.applied || 0
     }
-    return applied
+    normalized.push(...files)
+    return { applied, normalized }
   }
 
   async _synchronize() {
@@ -327,6 +337,9 @@ export class SyncManager extends EventEmitter {
     if (!config.enabled) return this.getStatus()
     const token = this._getCredential()
     const state = this._readState()
+    const account = config.serverUrl + '/' + config.userId
+    if (state.account && state.account !== account) throw Error('切换同步账户前请导出本地数据，并使用单独的数据目录，避免混合账户记录')
+    state.account = account
     let queue = this._readQueue()
     this._setStatus({ phase: 'syncing', message: '正在核对本地与云端记录', queued: queue.length })
     try {
@@ -363,13 +376,23 @@ export class SyncManager extends EventEmitter {
             operations: outgoing.map(networkOperation)
           })
         })
+        if (!Array.isArray(response.records) || !Array.isArray(response.acknowledgedIds) || !Number.isSafeInteger(response.cursor) || response.cursor < 0 || (response.hasMore && response.cursor <= state.cursor)) {
+          throw new Error('同步响应格式错误，本地队列已保留')
+        }
         const outgoingIds = new Set(outgoing.map((operation) => operation.opId))
         const acknowledged = new Set(
           (response.acknowledgedIds || []).filter((operationId) => outgoingIds.has(operationId))
         )
         queue = queue.filter((operation) => !acknowledged.has(operation.opId))
         uploaded += acknowledged.size
-        downloaded += await this._applyRemote(response.records || [], config, headers)
+        const duringRequest = collectLocalChanges(await this._localRecords(), state.recordHashes, this.ntpClock.now(), state.deviceId)
+        queue = mergeQueue(queue, duringRequest.operations)
+        state.recordHashes = duringRequest.hashes
+        const pendingIds = new Set(queue.map(operation => operation.record.id))
+        const incoming = (response.records || []).filter(record => !pendingIds.has(record.id))
+        const applied = await this._applyRemote(incoming, config, headers)
+        downloaded += applied.applied
+        for (const record of applied.normalized) state.recordHashes[record.id] = recordHash(record)
         const previousCursor = state.cursor
         const responseCursor = Number(response.cursor)
         if (Number.isFinite(responseCursor) && responseCursor >= 0) state.cursor = responseCursor
@@ -386,9 +409,10 @@ export class SyncManager extends EventEmitter {
       }
 
       const refreshed = await this._localRecords()
-      state.recordHashes = Object.fromEntries(
-        refreshed.map((record) => [record.id, recordHash(record)])
-      )
+      const finalChanges = collectLocalChanges(refreshed, state.recordHashes, this.ntpClock.now(), state.deviceId)
+      queue = mergeQueue(queue, finalChanges.operations)
+      state.recordHashes = finalChanges.hashes
+      this._writeQueue(queue)
       state.lastSyncAt = new Date(this.ntpClock.now()).toISOString()
       this._writeState(state)
       this.failureCount = 0

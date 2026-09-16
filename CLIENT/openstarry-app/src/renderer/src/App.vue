@@ -39,7 +39,7 @@
           </el-header>
 
           <el-main class="main-window">
-            <div v-if="runtimeStatus.phase === 'ready'" v-show="!isResizing">
+            <div v-if="runtimeStatus.phase === 'ready'" class="page-content">
               <router-view v-slot="{ Component }">
                 <keep-alive>
                   <component :is="Component" />
@@ -54,11 +54,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, getCurrentInstance, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, nextTick, getCurrentInstance, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { ConfirmDialog } from './views/component/comp/confirmDialog.js'
 import { useAppCacheData } from './store/app.js';
-import { OpenStarry_client_version } from './store/globalData.js';
+import { OpenStarry_client_version, syncRevision, loadedHistorySet, generatingState } from './store/globalData.js';
+import { animateNavigation } from './motion/navigation.js'
+import { refreshPreferences } from './store/sharedPreferences.js'
 import appIcon from './assets/background/OpenStarry.png'
 
 const lacale = zhCn
@@ -70,6 +73,7 @@ const minimize = () => window.electron.ipcRenderer.send('window-minimize')
 const maximize = () => window.electron.ipcRenderer.send('window-maximize')
 const close = () => window.electron.ipcRenderer.send('window-close')
 const store = useAppCacheData()
+const router = useRouter()
 const OpenStarryIcon = ref<HTMLImageElement | null>(null)
 function playSpin() {
   const el = OpenStarryIcon.value
@@ -98,13 +102,25 @@ async function showAppInfo() {
   )
 }
 
-const isResizing = ref(false)
 const runtimeStatus = ref({
   phase: 'starting',
   message: '正在初始化 OpenStarry NextGen',
   progress: 0
 })
 const subscriptions: Array<() => void> = []
+subscriptions.push(router.afterEach(async (to, from, failure) => {
+  if (failure || to.path === from.path) return
+  await nextTick()
+  animateNavigation(document.querySelector('.page-content'), to.path, from.path)
+}))
+
+let preferencesReady = false
+watch(() => runtimeStatus.value.phase, async phase => {
+  if (phase !== 'ready' || preferencesReady) return
+  preferencesReady = true
+  try { await refreshPreferences(store, true) }
+  catch { preferencesReady = false }
+})
 
 async function retryRuntime() {
   runtimeStatus.value = { phase: 'starting', message: '正在重新初始化', progress: 1 }
@@ -115,24 +131,19 @@ async function retryRuntime() {
   }
 }
 
-let resizeTimer: ReturnType<typeof setTimeout> | null = null
-
-function handleWindowResize() {
-  isResizing.value = true
-
-  if (resizeTimer) {
-    clearTimeout(resizeTimer)
-  }
-
-  resizeTimer = setTimeout(() => {
-    isResizing.value = false
-    resizeTimer = null
-  }, 150)
-}
-
 onMounted(async () => {
-  window.addEventListener('resize', handleWindowResize)
 
+  subscriptions.push(window.api.system.onQuestionFocus(({ historyId }) => {
+    store.current_history_id = historyId
+    router.push('/assistPage')
+  }))
+  subscriptions.push(window.api.system.onSyncStatus(async status => {
+    if (status.phase !== 'synced') return
+    try { await refreshPreferences(store) }
+    catch (error) { console.warn('Synced preferences refresh failed:', error) }
+    for (const id of loadedHistorySet) if (!generatingState[id]?.isGenerating) loadedHistorySet.delete(id)
+    syncRevision.value++
+  }))
   let runtimeEventSeen = false
   subscriptions.push(window.api.system.onRuntimeStatus((status) => {
     runtimeEventSeen = true
@@ -184,17 +195,18 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', handleWindowResize)
   subscriptions.splice(0).forEach((unsubscribe) => unsubscribe())
-
-  if (resizeTimer) {
-    clearTimeout(resizeTimer)
-    resizeTimer = null
-  }
 })
 </script>
 
 <style scoped>
+@media (prefers-reduced-motion: reduce) {
+  :deep(*), :deep(*::before), :deep(*::after) {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 .app-wrapper {
   background-color: transparent;
 }

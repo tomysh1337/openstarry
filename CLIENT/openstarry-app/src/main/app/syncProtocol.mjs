@@ -37,6 +37,8 @@ function tombstone(id) {
     payload.conversation_uid = parts.shift() || ''
     payload.sync_id = parts.join(':')
   }
+  if (kind === 'provider') payload.provider_id = parts.join(':')
+  if (kind === 'preference') payload.key = parts.join(':')
   if (kind === 'file') payload.file_id = parts.join(':')
   return { id, kind, deleted: true, payload }
 }

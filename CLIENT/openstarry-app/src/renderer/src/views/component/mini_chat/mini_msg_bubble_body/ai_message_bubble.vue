@@ -159,11 +159,7 @@
           v-if="msg.questions?.questions && msg.questions?.questions.length > 0"
           class="questions-block"
         >
-          <QuestionView
-            :questions="msg.questions?.questions"
-            :qid="msg.questions?.qid"
-            @complete="handleCompleteQuestions"
-          />
+          <span>Agent 正在等待你的回答，请在输入栏上方填写。</span>
         </div>
       </transition>
 
@@ -186,7 +182,7 @@
         </div>
         <div class="tag-wrapper">
           <div class="tag-name">耗时:</div>
-          <div>{{ (msg.info?.total_duration / 1000) ?? 'N/A' }}S</div>
+          <div>{{ Number.isFinite(msg.info?.total_duration) ? (msg.info.total_duration / 1000).toFixed(2) : '—' }}S</div>
         </div>
         <div
           v-if="msg.extra?.link_provider?.length > 0 || msg.extra?.content_provider?.length > 0 || msg.extra?.key_word?.length > 0 || msg.extra?.urls?.length > 0"
