@@ -34,9 +34,9 @@
   - Agent 输入区、模型选择和问题卡都在 `mountWorkbench` 内创建。
 - 共享 Agent 样式：`SHARED/workbench/src/workbench-ui.css`
 - 桌面 IDE 适配：`CLIENT/openstarry-app/src/renderer/src/views/idePage.vue`
-  - 当前 `configureProvider` 跳转 `/dataPage?section=providers`。
+  - `configureProvider` 在 Agent 侧栏内创建供应商弹窗，保存后刷新模型菜单。
 - 手机 IDE 适配：`MOBILE/openstarry-mobile/src/main.js`
-  - 当前 `configureProvider` 调用 `showProviders()`。
+  - `configureProvider` 在 Agent 侧栏内打开供应商编辑弹层，窄屏定位为底部抽屉。
 - 桌面供应商页面：`CLIENT/openstarry-app/src/renderer/src/views/dataPage.vue` 及 `views/component/provider_card/`。
 - 手机供应商页面与编辑弹窗：`MOBILE/openstarry-mobile/src/main.js` 的 `showProviders` / `editProvider`。
 
@@ -49,4 +49,9 @@
 - 取消、点击关闭、切换 Agent 会话不会清空已有聊天记录或输入草稿。
 - 回归 320、390、768、1280 像素宽度，运行共享测试、手机 IDE 测试和桌面构建。
 
-本交接项只记录需求和实现入口，当前提交中的 IDEA 风格 Agent 改版保持原样。
+## 本轮实现与验证
+
+- 共享工作台把 Agent 配置回调绑定到当前侧栏容器，保存或取消不会切换路由、会话或输入草稿。
+- 桌面和手机均保留供应商名称、OpenAI 兼容接口、设备 API 密钥、模型 ID 列表、保存/取消和连接测试反馈。
+- 共享工作台测试 9 项通过；手机和桌面生产构建通过。
+- 手机同步测试需要本地 `127.0.0.1:8766` 测试服务，当前服务未启动，4 项网络相关测试因此未通过，2 项本地隔离测试通过。

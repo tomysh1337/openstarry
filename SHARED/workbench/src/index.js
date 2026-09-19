@@ -127,7 +127,7 @@ export async function mountWorkbench(host, options = {}) {
     { value: 'ask', label: '仅提问', icon: 'chat', description: '讨论和解释代码，不调用工具或修改文件。' },
   ] })
   const modelPicker = createPicker({ label: '项目 Agent 模型', className: 'os-agent-model', placement: 'above', onChange: value => Promise.resolve(options.selectModel?.(value)).then(refreshModels).catch(report) })
-  const configureModel = button('', async () => { await options.configureProvider?.(); if (!disposed) await refreshModels() }, 'os-picker os-agent-model os-configure-model')
+  const configureModel = button('', async () => { await options.configureProvider?.({ parent: agentPane, current: await options.getModel?.() }); if (!disposed) await refreshModels() }, 'os-picker os-agent-model os-configure-model')
   configureModel.append(node('span', 'os-picker-caption', '请先配置模型'), icon('settings'))
   configureModel.title = '前往供应商配置'; configureModel.disabled = !options.configureProvider
   modelPicker.element.hidden = true

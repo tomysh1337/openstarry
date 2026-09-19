@@ -92,6 +92,7 @@
 .os-output:has(.os-preview:not([hidden])) .os-output-text{display:none}
 .os-output-collapsed .os-output{display:none}
 .os-agent{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--ide-bg)}
+.os-agent{position:relative}
 .os-agent-head{border-bottom:1px solid var(--ide-line);padding:5px 14px}
 .os-agent-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
 .os-agent-title svg{color:var(--agent-accent)}
@@ -260,3 +261,19 @@
 .os-thinking,.os-tool-event[data-phase=running] .os-tool-indicator{animation:os-breathe 1.6s ease-in-out infinite}
 @keyframes os-appear{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes os-breathe{50%{opacity:.4}}}
+
+/* Provider setup stays inside the Agent tool window so the project session and
+   input draft remain visible while credentials are edited. */
+.os-provider-dialog{position:absolute;z-index:12;inset:12px 12px auto auto;width:min(440px,calc(100% - 24px));max-height:calc(100% - 24px);margin:0;padding:0;overflow:hidden;border:1px solid var(--ide-line);border-radius:8px;background:var(--ide-panel);color:var(--ide-text);box-shadow:0 16px 48px #0004}
+.os-provider-dialog::backdrop{background:#1f263233}
+.os-provider-dialog[open]{display:flex;flex-direction:column;animation:os-appear 180ms cubic-bezier(.2,.8,.2,1)}
+.os-provider-dialog .os-provider-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border-bottom:1px solid var(--ide-line);background:var(--ide-bg);flex-shrink:0}
+.os-provider-dialog .os-provider-head h3{margin:0;font-size:13px;font-weight:600}
+.os-provider-dialog .os-provider-content{min-height:0;overflow:auto;padding:10px 12px}
+.os-provider-dialog .os-provider-field{display:flex;flex-direction:column;gap:4px;margin:0 0 10px;color:var(--ide-muted);font-size:11px}
+.os-provider-dialog .os-provider-field input,.os-provider-dialog .os-provider-field textarea{width:100%;font-size:12px}
+.os-provider-dialog .os-provider-field textarea{min-height:74px;resize:vertical}
+.os-provider-dialog .os-provider-feedback{min-height:18px;margin:6px 0 0;color:var(--agent-accent);font-size:11px;overflow-wrap:anywhere}
+.os-provider-dialog .os-provider-footer{display:flex;justify-content:flex-end;gap:6px;padding:9px 12px;border-top:1px solid var(--ide-line);background:var(--ide-bg);flex-shrink:0}
+.os-provider-dialog .os-provider-test{margin-top:-3px;margin-bottom:8px;font-size:11px}
+@container (max-width:620px){.os-provider-dialog{inset:auto 8px 8px;width:calc(100% - 16px);max-height:calc(100% - 16px)}.os-provider-dialog .os-provider-content{padding:9px 10px}.os-provider-dialog .os-provider-footer{padding:8px 10px}.os-provider-dialog .os-provider-footer .os-primary{flex:1}}

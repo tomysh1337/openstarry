@@ -43,7 +43,10 @@ async function showIde() {
   if (!workbench) {
     const [{ mountWorkbench }, { mobileRequest, exportMobileFile }] = await Promise.all([import('@openstarry/workbench'), import('./agentAdapter.js')])
     workbench = await mountWorkbench(ideView, { theme: prefs.dark_theme ? 'dark' : 'light', notify, request: mobileRequest, exportFile: exportMobileFile,
-      configureProvider: showProviders,
+      configureProvider: ({ parent } = {}) => {
+        const id = modelSelect.value ? JSON.parse(modelSelect.value)[0] : ''
+        return editProvider(providerList.find(provider => provider.provider_id === id), async () => { await refreshModels(); workbench?.refresh?.() }, parent || document.body)
+      },
       getModel: async () => { await refreshModels(); if (!modelSelect.value) return {}; const [id, model] = JSON.parse(modelSelect.value); return { endpoint: providerList.find(item => item.provider_id === id)?.endpoint, key: apiKey(id), model, temperature: Number(prefs.modelTemp ?? 50) * .02, rolePrompt: prefs.rolePrompt?.definition || '' } },
       getModels: () => [...modelSelect.options].filter(option => option.value).map(option => ({ value: option.value, label: option.textContent, selected: option.selected })),
       selectModel: async value => { modelSelect.value = value; await modelSelect.onchange() }
@@ -255,8 +258,8 @@ async function syncNow(quiet = false) {
   } catch (error) { status.textContent = `离线保留 · 待同步 ${await pendingCount()} 项`; if (!quiet) showError(error) }
   finally { syncing = false; header.classList.remove('is-syncing') }
 }
-function modal(title) {
-  const dialog = el('dialog', 'settings-dialog'); const top = el('header', 'dialog-header'); const label = el('h2', '', title); label.id = 'dialog-' + crypto.randomUUID(); dialog.setAttribute('aria-labelledby', label.id)
+function modal(title, parent = document.body, embedded = false) {
+  const dialog = el('dialog', 'settings-dialog' + (embedded ? ' os-provider-dialog' : '')); const top = el('header', 'dialog-header'); const label = el('h2', '', title); label.id = 'dialog-' + crypto.randomUUID(); dialog.setAttribute('aria-labelledby', label.id)
   top.append(label, iconButton('关闭', 'close', () => dialog.close())); dialog.append(top)
   const close = dialog.close.bind(dialog)
   let closing = false
@@ -269,10 +272,11 @@ function modal(title) {
     close()
   }
   dialog.addEventListener('cancel', event => { event.preventDefault(); dialog.close() })
-  dialog.addEventListener('close', () => dialog.remove()); document.body.append(dialog); dialog.showModal(); return dialog
+  dialog.addEventListener('close', () => dialog.remove()); parent.append(dialog); embedded ? dialog.show() : dialog.showModal(); return dialog
 }
-async function editProvider(provider, afterSave) {
-  const dialog = modal(provider ? '编辑供应商与模型' : '添加供应商')
+async function editProvider(provider, afterSave, parent = document.body) {
+  const embedded = parent !== document.body
+  const dialog = modal(provider ? '编辑供应商与模型' : '添加供应商', parent, embedded)
   const name = field('供应商名称', provider?.provider_name || '')
   name.input.maxLength = 50
   const endpoint = field('OpenAI 兼容接口地址', provider?.endpoint || 'https://api.openai.com/v1', 'url')
@@ -282,7 +286,7 @@ async function editProvider(provider, afterSave) {
   const error = el('p', 'form-error'); error.setAttribute('role', 'alert')
   const getModels = button('获取并合并模型列表', async () => {
     getModels.disabled = true; error.textContent = '正在获取…'
-    try { const ids = await fetchModels({ endpoint: endpoint.input.value }, key.input.value); models.input.value = [...new Set([...models.input.value.split('\n').filter(Boolean), ...ids])].join('\n'); error.textContent = `已获取 ${ids.length} 个模型` }
+    try { const ids = await fetchModels({ endpoint: endpoint.input.value }, key.input.value); models.input.value = [...new Set([...models.input.value.split('\n').filter(Boolean), ...ids])].join('\n'); error.textContent = `连接成功，获取 ${ids.length} 个模型` }
     catch (err) { error.textContent = err.message + '；也可手动填写' }
     finally { getModels.disabled = false }
   }, 'quiet')
@@ -296,6 +300,7 @@ async function editProvider(provider, afterSave) {
       await refreshModels(); await afterSave?.(); dialog.close(); notify('供应商与模型已保存')
     } catch (err) { error.textContent = err.message }
   }, 'primary')
+  getModels.textContent = '测试连接并获取模型'
   const content = el('div', 'dialog-content'); content.append(el('p', 'muted', '供应商和模型与电脑互通，API 密钥仅保存在本设备。'), name.wrap, endpoint.wrap, key.wrap, models.wrap, getModels, description.wrap, error)
   const footer = el('footer', 'dialog-footer'); footer.append(button('取消', () => dialog.close(), 'quiet'), save)
   dialog.append(content, footer)
