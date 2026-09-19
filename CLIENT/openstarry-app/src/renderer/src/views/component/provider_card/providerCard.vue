@@ -188,7 +188,7 @@ const handleEdit = () => {
   position: relative;
   padding: 14px 16px;
   border-radius: 12px;
-  height: 250px;
+  min-height: 250px;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
@@ -228,6 +228,7 @@ const handleEdit = () => {
 
 .provider-content {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -236,7 +237,7 @@ const handleEdit = () => {
 
 .provider-title-wrapper {
   display: grid;
-  grid-template-columns: 30px auto;
+  grid-template-columns: 30px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
 }
@@ -283,13 +284,15 @@ const handleEdit = () => {
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
 }
 
 /* Footer */
 
 .provider-footer {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex-shrink: 0;
   gap: 6px;
   column-gap: 8px;
 
@@ -313,6 +316,13 @@ const handleEdit = () => {
   transition: all 0.2s ease;
   text-overflow: ellipsis;
   -webkit-line-clamp: 1;
+}
+
+.footer-tag > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .footer-tag:hover {
