@@ -15,6 +15,7 @@ import { diffLines } from 'diff'
 import { zipSync, unzipSync, strToU8 } from 'fflate'
 import MarkdownIt from 'markdown-it'
 import { icon } from './icons.js'
+import { createPicker } from './picker.js'
 import { Workspace, projectStore, validateFiles, MAX_FILE_BYTES, MAX_PROJECT_BYTES } from './model.js'
 import { loadToolSettings } from './settings.js'
 import { runAgent } from './agent.js'
@@ -70,8 +71,10 @@ export async function mountWorkbench(host, options = {}) {
   const iconButton = (label, symbol, action, cls = '') => { const value = button('', action, 'os-icon-button ' + cls); value.append(icon(symbol)); value.title = label; value.setAttribute('aria-label', label); return value }
   const root = node('section', 'os-ide'); root.setAttribute('aria-label', 'IDE 工作区')
   root.dataset.panel = currentPanel; root.dataset.theme = options.theme || 'light'
-  const toolbar = node('header', 'os-toolbar'), brand = node('span', 'os-brand', 'OS'), projectSelect = node('select', 'os-project-select'); brand.title = 'OpenStarry IDE'; projectSelect.setAttribute('aria-label', '当前项目')
-  const projectPicker = node('div', 'os-project-picker'); projectPicker.append(brand, projectSelect)
+  const toolbar = node('header', 'os-toolbar'), brand = node('span', 'os-brand', 'OS')
+  brand.title = 'OpenStarry IDE'
+  const projectSelect = createPicker({ label: '当前项目', className: 'os-project-select', onChange: id => { projectSelect.value = workspace.id; projectStore.load(id).then(selectWorkspace).catch(report) } })
+  const projectPicker = node('div', 'os-project-picker'); projectPicker.append(brand, projectSelect.element)
   const quickSearch = button('', () => { selectPanel('files'); query.focus() }, 'os-quick-search'); quickSearch.append(icon('search'), node('span', '', '搜索项目文件与代码')); quickSearch.setAttribute('aria-label', '搜索项目文件与代码')
   const nav = node('nav', 'os-panel-nav'); nav.setAttribute('aria-label', 'IDE 面板')
   const panels = new Map()
@@ -110,10 +113,12 @@ export async function mountWorkbench(host, options = {}) {
   const agentComposer = node('div', 'os-agent-composer'), contextChips = node('div', 'os-context-chips')
   const agentInput = node('textarea', 'os-agent-input'); agentInput.placeholder = '一起完成下一个想法…'; agentInput.setAttribute('aria-label', '项目 Agent 消息'); agentInput.rows = 3
   const agentSend = iconButton('发送', 'arrow', sendAgent, 'os-agent-send'), agentStop = iconButton('停止', 'stop', () => agentController?.abort(Error('Agent 已停止')), 'os-agent-send'); agentStop.hidden = true
-  const agentMode = node('select', 'os-agent-mode'); agentMode.setAttribute('aria-label', 'Agent 工作模式'); for (const [id, label] of [['agent', 'Agent'], ['ask', '仅提问']]) { const option = node('option', '', label); option.value = id; agentMode.append(option) }
-  const modelPicker = node('select', 'os-agent-model'); modelPicker.setAttribute('aria-label', '项目 Agent 模型')
-  modelPicker.onchange = () => Promise.resolve(options.selectModel?.(modelPicker.value)).then(refreshModels).catch(report)
-  const agentButtons = node('div', 'os-composer-actions'); agentButtons.append(iconButton('引用当前文件', 'attach', () => { if (workspace.active) { references.add(workspace.active); renderReferences(); agentInput.focus() } }), agentMode, modelPicker, agentStop, agentSend)
+  const agentMode = createPicker({ label: 'Agent 工作模式', className: 'os-agent-mode', placement: 'above', items: [
+    { value: 'agent', label: 'Agent', icon: 'agent', description: '使用已启用的工具完成任务，代码修改先审查。' },
+    { value: 'ask', label: '仅提问', icon: 'chat', description: '讨论和解释代码，不调用工具或修改文件。' },
+  ] })
+  const modelPicker = createPicker({ label: '项目 Agent 模型', className: 'os-agent-model', placement: 'above', onChange: value => Promise.resolve(options.selectModel?.(value)).then(refreshModels).catch(report) })
+  const agentButtons = node('div', 'os-composer-actions'); agentButtons.append(iconButton('引用当前文件', 'attach', () => { if (workspace.active) { references.add(workspace.active); renderReferences(); agentInput.focus() } }), agentMode.element, modelPicker.element, agentStop, agentSend)
   agentComposer.append(contextChips, agentInput, agentButtons)
   const agentFoot = node('div', 'os-agent-foot', '修改先审查，再保存'); agentFoot.append(node('span', '', 'Ctrl + Enter'))
   agentPane.append(agentHead, history, chat, agentState, questionDock, agentComposer, agentFoot)
@@ -138,10 +143,8 @@ export async function mountWorkbench(host, options = {}) {
   }
   async function refreshModels() {
     const current = await options.getModel?.(), models = await options.getModels?.() || (current?.model ? [{ value: current.model, label: current.model, selected: true }] : [])
-    modelPicker.replaceChildren(...models.map(model => { const option = node('option', '', model.label); option.value = model.value; option.selected = Boolean(model.selected); return option }))
-    if (!models.length) modelPicker.append(node('option', '', '请先配置模型'))
+    modelPicker.setItems(models.length ? models : [{ value: '', label: '请先配置模型' }], models.find(model => model.selected)?.value ?? models[0]?.value ?? '')
     modelPicker.disabled = !models.length || !options.selectModel || Boolean(agentController)
-    modelPicker.title = modelPicker.selectedOptions[0]?.textContent || ''
   }
   function renderReferences() {
     contextChips.replaceChildren(...[...references].map(path => { const chip = node('span', 'os-context-chip'); chip.append(icon('editor'), node('span', '', path), iconButton('移除引用 ' + path, 'close', () => { references.delete(path); renderReferences() })); chip.title = path; return chip }))
@@ -166,8 +169,7 @@ export async function mountWorkbench(host, options = {}) {
     if (agentController || runController) throw Error('请先停止当前任务再切换项目')
     clearTimeout(saveTimer); await persist(); workspace = next; activeWorkspace = workspace; comparison = false; references.clear(); renderReferences(); history.hidden = true; command.value = workspace.command; await persist(); await renderProjectSelect(); renderAll()
   }
-  async function renderProjectSelect() { const list = await projectStore.list(); if (!list.some(item => item.id === workspace.id)) list.push(workspace); projectSelect.replaceChildren(...list.map(item => { const value = node('option', '', item.name); value.value = item.id; return value })); projectSelect.value = workspace.id }
-  projectSelect.onchange = () => { const id = projectSelect.value; projectSelect.value = workspace.id; projectStore.load(id).then(selectWorkspace).catch(report) }
+  async function renderProjectSelect() { const list = await projectStore.list(); if (!list.some(item => item.id === workspace.id)) list.push(workspace); projectSelect.setItems(list.map(item => ({ value: item.id, label: item.name, icon: 'folder' })), workspace.id) }
   async function createProject() {
     const name = await askQuestion({ question: '新项目名称' }); if (!name) return
     const next = new Workspace({ name: name.slice(0, 80) }); next.create('main.js', 'console.log("Hello, OpenStarry!");\n'); await selectWorkspace(next); selectPanel('editor')
@@ -340,5 +342,5 @@ export async function mountWorkbench(host, options = {}) {
   agentInput.onkeydown = event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); sendAgent().catch(report) } }
   const onHide = () => { clearTimeout(saveTimer); persist() }; document.addEventListener('visibilitychange', onHide)
   await renderProjectSelect(); renderAll(); selectPanel('editor'); refreshModels().catch(report)
-  return { refresh: () => { renderAll(); renderProjectSelect().catch(report); refreshModels().catch(report) }, setTheme: theme => { const next = localStorage.getItem('openstarry.ide.theme') || theme; if (root.dataset.theme !== next) { root.dataset.theme = next; renderEditor() } }, destroy: () => { if (disposed) return; disposed = true; clearTimeout(saveTimer); agentController?.abort(Error('IDE 已关闭')); runController?.abort(Error('IDE 已关闭')); document.removeEventListener('visibilitychange', onHide); closeHtmlPreview(preview); persist(); editor?.destroy(); root.remove() } }
+  return { refresh: () => { renderAll(); renderProjectSelect().catch(report); refreshModels().catch(report) }, setTheme: theme => { const next = localStorage.getItem('openstarry.ide.theme') || theme; if (root.dataset.theme !== next) { root.dataset.theme = next; renderEditor() } }, destroy: () => { if (disposed) return; disposed = true; clearTimeout(saveTimer); agentController?.abort(Error('IDE 已关闭')); runController?.abort(Error('IDE 已关闭')); document.removeEventListener('visibilitychange', onHide); closeHtmlPreview(preview); projectSelect.destroy(); agentMode.destroy(); modelPicker.destroy(); persist(); editor?.destroy(); root.remove() } }
 }

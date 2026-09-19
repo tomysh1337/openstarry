@@ -1,0 +1,22 @@
+.os-ide .os-picker{display:inline-flex;align-items:center;gap:6px;min-width:0;text-align:left;border:0;background:transparent;border-radius:6px;padding:5px 7px}
+.os-picker-caption{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.os-ide .os-picker-chevron{width:12px;height:12px;opacity:.65;transform:rotate(90deg)}
+.os-ide .os-picker[aria-expanded=true]{background:var(--ide-soft)}
+.os-ide .os-picker[aria-expanded=true] .os-picker-chevron{transform:rotate(-90deg)}
+.os-picker-menu{position:fixed;z-index:10000;display:flex;flex-direction:column;box-sizing:border-box;padding:5px;background:var(--ide-bg);color:var(--ide-text);border:1px solid var(--ide-line);border-radius:10px;box-shadow:0 12px 40px #0003,0 2px 8px #0002;overflow:hidden;font-size:13px;line-height:1.5;text-align:left}
+.os-picker-menu *{box-sizing:border-box}
+.os-picker-heading{padding:7px 9px 8px;color:var(--ide-muted);font-size:11px;flex-shrink:0}
+.os-picker-options{overflow:auto;min-height:0;overscroll-behavior:contain;scrollbar-width:thin}
+.os-picker-option{display:flex;align-items:center;gap:10px;min-height:38px;margin:1px 0;padding:8px 9px;border-radius:6px;cursor:pointer;user-select:none}
+.os-picker-option.is-active{background:var(--ide-soft)}
+.os-picker-option[aria-disabled=true]{opacity:.45;cursor:default}
+.os-picker-option svg{width:17px;height:17px;flex-shrink:0;color:var(--ide-muted)}
+.os-picker-copy{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.os-picker-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.os-picker-description{font-size:11px;color:var(--ide-muted);overflow-wrap:anywhere;line-height:1.6}
+.os-picker-option .os-picker-check{visibility:hidden;width:15px;color:var(--ide-accent)}
+.os-picker-option[aria-selected=true] .os-picker-check{visibility:visible}
+@media(pointer:coarse){.os-picker-option{min-height:44px}}
+@media(prefers-reduced-motion:no-preference){.os-picker-menu{animation:os-menu-in 130ms cubic-bezier(.2,.8,.2,1)}
+.os-picker-chevron{transition:transform 140ms ease}
+@keyframes os-menu-in{from{opacity:0;translate:0 3px}to{opacity:1;translate:0 0}}}

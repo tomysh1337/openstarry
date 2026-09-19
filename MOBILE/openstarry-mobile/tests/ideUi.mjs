@@ -33,7 +33,7 @@ try {
     await expect(page.frameLocator('.os-preview').getByRole('heading', { name: 'Preview works' })).toBeVisible({ timeout: 15000 })
   }
   await panel('项目'); await page.getByLabel('搜索项目内容').fill('NEW_VALUE'); await page.getByRole('button', { name: /main.js:1/ }).click(); await expect(page.locator('.cm-content')).toContainText('NEW_VALUE')
-  await page.reload(); await navigate('IDE'); await expect(page.getByLabel('当前项目')).toHaveValue(/.+/); await expect(page.locator('.cm-content')).toContainText('NEW_VALUE')
+  await page.reload(); await navigate('IDE'); await expect(page.getByRole('combobox', { name: '当前项目' })).toContainText('IDE 验证项目'); await expect(page.locator('.cm-content')).toContainText('NEW_VALUE')
   for (const width of [320, 390, 768, 1280]) {
     await page.setViewportSize({ width, height: 844 })
     for (const name of ['项目', '代码', '审查', '输出', 'Agent']) {
@@ -41,6 +41,13 @@ try {
       assert.ok(await page.locator('.os-ide').evaluate(element => element.scrollWidth <= element.clientWidth + 1), name + ' layout fits ' + width)
       assert.ok(await page.locator('.workspace').evaluate(element => element.getBoundingClientRect().right <= innerWidth + 1), 'screen fits')
     }
+    const mode = page.getByRole('combobox', { name: 'Agent 工作模式' })
+    await mode.click()
+    const popup = page.locator('.os-picker-menu')
+    await expect(popup).toBeVisible()
+    const bounds = await popup.boundingBox()
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width && bounds.y >= 0 && bounds.y + bounds.height <= 844, 'picker fits ' + width)
+    await mode.press('Escape'); await expect(mode).toBeFocused(); await expect(popup).toHaveCount(0)
   }
   await panel('代码'); await page.screenshot({ path: shots + '/ide-wide.png' })
   await page.setViewportSize({ width: 390, height: 420 }); await expect(page.locator('.cm-content')).toBeVisible(); await page.screenshot({ path: shots + '/keyboard.png' })
@@ -64,7 +71,13 @@ try {
   await page.getByRole('button', { name: '新的项目对话' }).click(); await expect(page.locator('.os-agent-welcome')).toBeVisible()
   await page.getByRole('button', { name: '会话历史' }).click(); await page.locator('.os-chat-history').getByRole('button', { name: '修改 main.js 的输出内容' }).click()
   await expect(page.getByLabel('项目 Agent 对话')).toContainText('代码提案已经生成')
-  await page.getByLabel('项目 Agent 模型').selectOption({ label: 'second-model' }); await page.getByLabel('Agent 工作模式').selectOption('ask')
+  await page.getByRole('combobox', { name: '项目 Agent 模型' }).click(); await page.getByRole('option', { name: 'second-model', exact: true }).click()
+  const modePicker = page.getByRole('combobox', { name: 'Agent 工作模式' })
+  await modePicker.focus(); await modePicker.press('ArrowDown'); await modePicker.press('End'); await modePicker.press('Enter')
+  await expect(modePicker).toHaveAttribute('data-value', 'ask'); await expect(modePicker).toBeFocused()
+  await modePicker.click(); await modePicker.press('Home'); await modePicker.press('Escape')
+  await expect(modePicker).toHaveAttribute('data-value', 'ask')
+  await modePicker.click(); await modePicker.press('Tab'); await expect(page.locator('.os-picker-menu')).toHaveCount(0)
   await page.getByRole('button', { name: '引用当前文件' }).click(); await expect(page.locator('.os-context-chip')).toContainText('main.js')
   await page.unroute('http://127.0.0.1:9876/v1/chat/completions')
   let captured
@@ -76,7 +89,7 @@ try {
   await expect(page.getByLabel('项目 Agent 对话')).toContainText('项目检查完成')
   assert.equal(captured.model, 'second-model'); assert.ok(!captured.tools?.length, 'ask mode has no tools'); assert.ok(captured.messages.at(-1).content.includes('AGENT_REVIEWED'), 'referenced content reaches model')
   await expect(page.locator('.os-message-content h3')).toHaveText('项目检查完成'); assert.equal(await page.evaluate(() => window.injected), undefined)
-  await page.getByLabel('Agent 工作模式').selectOption('agent')
+  await page.getByRole('combobox', { name: 'Agent 工作模式' }).click(); await page.getByRole('option', { name: /^Agent/ }).click()
   await page.unroute('http://127.0.0.1:9876/v1/chat/completions')
   let questionCalls = 0
   await page.route('http://127.0.0.1:9876/v1/chat/completions', async route => {

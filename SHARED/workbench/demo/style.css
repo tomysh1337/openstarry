@@ -1,0 +1,4 @@
+html,body{height:100%;margin:0;background:#1e1f22}
+body{box-sizing:border-box;padding:12px}
+#workbench{height:100%;min-height:0;min-width:0}
+@media(max-width:620px){body{padding:0}.os-ide{border-radius:0}}

@@ -4,6 +4,7 @@ const paths = {
   review: 'M8 3H4v18h16V7l-4-4H8m8 0v5h4M8 12h8m-8 5h8m-4-3v6',
   output: 'M3 5h18v14H3zM6 9l3 3-3 3m6 0h5',
   agent: 'M12 2v4m0 12v4M2 12h4m12 0h4M5 5l3 3m8 8 3 3M5 19l3-3m8-8 3-3M12 7l2 3 3 2-3 2-2 3-2-3-3-2 3-2z',
+  chat: 'M4 4h16v12H9l-5 4V4zM8 8h8M8 12h5',
   plus: 'M12 5v14M5 12h14', close: 'm6 6 12 12M6 18 18 6',
   history: 'M3 10a9 9 0 1 1 1 7M3 4v6h6m3-3v6l4 2',
   attach: 'm9 12 6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l9-9m-6 11 7-7',

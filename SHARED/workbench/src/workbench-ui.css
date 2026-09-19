@@ -145,8 +145,8 @@
 .os-context-chip .os-icon-button{width:16px;height:16px;min-height:0;padding:0}
 .os-message-reference{margin:0 4px 6px 0;overflow-wrap:anywhere}
 .os-composer-actions{display:flex;align-items:center;gap:3px;min-width:0}
-.os-ide .os-composer-actions select{border:0;background:transparent;font-size:11px;padding:4px 0;text-overflow:ellipsis;height:30px}
-.os-agent-mode{width:70px;color:var(--agent-accent)!important;flex-shrink:0}
+.os-ide .os-composer-actions .os-picker{font-size:11px;height:30px}
+.os-agent-mode{width:78px;color:var(--agent-accent)!important;flex-shrink:0}
 .os-agent-model{flex:1;width:60px}
 .os-ide .os-agent-send{background:var(--agent-accent);color:var(--ide-panel);border-radius:6px;margin-left:3px}
 .os-ide .os-agent-send:hover{background:var(--agent-accent);filter:brightness(1.1)}
@@ -201,7 +201,7 @@
 .os-ide .os-agent-input{height:70px}
 .os-agent-composer .os-icon-button{width:34px;height:34px}
 .os-composer-actions{gap:4px}
-.os-ide .os-composer-actions select{height:34px;font-size:11px}
+.os-ide .os-composer-actions .os-picker{height:34px;font-size:11px}
 .os-agent-foot{padding-bottom:8px}
 .os-file{min-height:36px!important}
 .os-status-meta{display:none}}
