@@ -38,6 +38,11 @@ h1 { font-size: 16px; font-weight: 650; margin: 0 0 4px; white-space: nowrap; ov
 .sync-status::before { content: ''; display: inline-block; width: 5px; height: 5px; margin-right: 5px; border-radius: 50%; background: var(--accent); vertical-align: 2px; }
 .is-syncing .sync-button .icon { animation: spin 1.2s linear infinite; }
 .view-panel { flex: 1; min-height: 0; min-width: 0; }
+.ide-page { padding:0 8px 8px; overflow:hidden; }
+.ide-active { grid-template-columns:minmax(0,1fr); }
+.ide-active > .history-pane { display:none; }
+.ide-active .history-toggle { display:none !important; }
+.ide-active .topbar { min-height:50px; padding-block:5px; }
 .chat-screen { display: flex; flex-direction: column; }
 .messages { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 24px max(24px, calc((100% - 840px)/2)); scrollbar-width: thin; }
 .welcome { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-height: 100%; padding: 24px 0 56px; }

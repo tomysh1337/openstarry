@@ -2329,7 +2329,7 @@ watch(
 
     store.config.apiKey = cachedKey
 
-    if (!isApplyingPreferences()) store.saveAppConfig('modelName', '')
+    if (oldProvider !== undefined && !isApplyingPreferences()) store.saveAppConfig('modelName', '')
     modelSelectOptions.value = []
 
     if (!apiKeyChanged) {

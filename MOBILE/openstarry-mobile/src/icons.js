@@ -1,4 +1,5 @@
 const paths = {
+  code: '<path d="m8 6-6 6 6 6m8-12 6 6-6 6M14 3l-4 18"/>',
   chat: '<path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 3V6a2 2 0 0 1 1-2Z"/><path d="M8 9h8M8 13h5"/>',
   history: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',

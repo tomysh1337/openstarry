@@ -1,4 +1,6 @@
 import './style.css'
+import '@openstarry/workbench/style.css'
+import { mountToolSettings } from '@openstarry/workbench/settings'
 import { loadConfig, saveConfig, clearConfig, conversations, messages, providers, preferences, savePreferences, synchronize, putRecords, apiKey, pendingCount, meta } from './syncClient.js'
 import { newConversation, sendMessage, parseExtra } from './chatSession.js'
 import { fetchModels, normalizeEndpoint } from './chatClient.js'
@@ -34,6 +36,19 @@ header.append(historyToggle, title, iconButton('同步', 'sync', () => syncNow(f
 const chatView = el('section', 'chat-screen view-panel'); chatView.setAttribute('aria-label', '聊天')
 const providersView = el('section', 'content-page view-panel'); providersView.setAttribute('aria-label', '供应商'); providersView.hidden = true
 const settingsView = el('section', 'content-page view-panel'); settingsView.setAttribute('aria-label', '设置'); settingsView.hidden = true
+const ideView = el('section', 'ide-page view-panel'); ideView.setAttribute('aria-label', 'IDE'); ideView.hidden = true
+let workbench = null
+async function showIde() {
+  showView('ide')
+  if (!workbench) {
+    const [{ mountWorkbench }, { mobileRequest, exportMobileFile }] = await Promise.all([import('@openstarry/workbench'), import('./agentAdapter.js')])
+    workbench = await mountWorkbench(ideView, { theme: prefs.dark_theme ? 'dark' : 'light', notify, request: mobileRequest, exportFile: exportMobileFile,
+      getModel: async () => { await refreshModels(); if (!modelSelect.value) return {}; const [id, model] = JSON.parse(modelSelect.value); return { endpoint: providerList.find(item => item.provider_id === id)?.endpoint, key: apiKey(id), model, temperature: Number(prefs.modelTemp ?? 50) * .02, rolePrompt: prefs.rolePrompt?.definition || '' } },
+      getModels: () => [...modelSelect.options].filter(option => option.value).map(option => ({ value: option.value, label: option.textContent, selected: option.selected })),
+      selectModel: async value => { modelSelect.value = value; await modelSelect.onchange() }
+    })
+  } else workbench.refresh()
+}
 const messageList = el('div', 'messages'); messageList.setAttribute('aria-label', '消息列表')
 const welcome = el('div', 'welcome')
 welcome.append(el('img', 'welcome-logo'), el('span', 'eyebrow', 'OPENSTARRY NEXTGEN'), el('h2', '', '这次想聊点什么？'), el('p', '', '从一个想法开始，\n也可以接着电脑上的对话聊。'))
@@ -58,12 +73,12 @@ const composerWrap = el('div', 'composer-wrap'); composerWrap.append(composer, e
 chatView.append(messageList, composerWrap)
 const navigation = el('nav', 'bottom-nav'); navigation.setAttribute('aria-label', '主要导航')
 const navButtons = new Map()
-for (const [id, label, symbol, action] of [['chat', '聊天', 'chat', () => showView('chat')], ['providers', '供应商', 'provider', showProviders], ['settings', '设置', 'settings', showSettings]]) {
+for (const [id, label, symbol, action] of [['chat', '聊天', 'chat', () => showView('chat')], ['ide', 'IDE', 'code', showIde], ['providers', '供应商', 'provider', showProviders], ['settings', '设置', 'settings', showSettings]]) {
   const node = labeledButton(label, symbol, action, 'nav-item'); node.dataset.view = id
   if (id === currentView) node.setAttribute('aria-current', 'page')
   navButtons.set(id, node); navigation.append(node)
 }
-screen.append(header, chatView, providersView, settingsView, navigation)
+screen.append(header, chatView, ideView, providersView, settingsView, navigation)
 const backdrop = button('', () => setHistoryOpen(false), 'history-backdrop'); backdrop.setAttribute('aria-label', '关闭聊天列表'); backdrop.tabIndex = -1
 shell.append(sidebar, backdrop, screen)
 const toast = el('div', 'toast'); toast.setAttribute('role', 'status')
@@ -79,9 +94,10 @@ function setHistoryOpen(open, restoreFocus = true) {
 }
 function showView(view) {
   currentView = view; setHistoryOpen(false, false)
+  shell.classList.toggle('ide-active', view === 'ide')
   heading.textContent = view === 'chat' ? currentTitle : 'OpenStarry NextGen'
   if (document.activeElement?.matches('input, textarea')) document.activeElement.blur()
-  for (const [id, panel] of [['chat', chatView], ['providers', providersView], ['settings', settingsView]]) panel.hidden = id !== view
+  for (const [id, panel] of [['chat', chatView], ['ide', ideView], ['providers', providersView], ['settings', settingsView]]) panel.hidden = id !== view
   for (const [id, node] of navButtons) { if (id === view) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current') }
   if (view === 'chat') resizeInput()
 }
@@ -120,6 +136,7 @@ function notify(text) { toast.textContent = text; toast.classList.add('visible')
 async function refreshModels() {
   providerList = await providers(); prefs = await preferences()
   document.documentElement.dataset.theme = prefs.dark_theme === true ? 'dark' : 'light'
+  workbench?.setTheme(prefs.dark_theme === true ? 'dark' : 'light')
   document.querySelector('meta[name="theme-color"]').content = prefs.dark_theme === true ? '#202126' : '#f5f5f9'
   modelSelect.replaceChildren()
   for (const provider of providerList) {
@@ -337,7 +354,8 @@ async function showSettings() {
     finally { connect.disabled = false }
   }, 'primary')
   syncSection.append(server.wrap, user.wrap, token.wrap, syncHint, connect, button('断开同步并保留本地数据', () => { if (syncing) throw Error('正在同步，请稍后断开'); clearConfig(); token.input.value = ''; status.textContent = '同步已断开 · 数据保留在本机'; notify('本机聊天和供应商配置已保留') }, 'quiet'))
-  settingsView.replaceChildren(title, appearance, general, syncSection, el('p', 'app-credit', `OpenStarry NextGen · tomysh · ${version}`))
+  const toolsSection = el('section', 'settings-section'); mountToolSettings(toolsSection, { notify, request: async value => (await import('./agentAdapter.js')).mobileRequest(value) })
+  settingsView.replaceChildren(title, appearance, general, toolsSection, syncSection, el('p', 'app-credit', `OpenStarry NextGen · tomysh · ${version}`))
   showView('settings')
 }
 await refreshModels(); await refreshHistory(); await renderMessages()

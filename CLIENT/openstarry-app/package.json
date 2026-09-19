@@ -1,6 +1,6 @@
 {
   "name": "openstarry-nextgen",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "OpenStarry NextGen integrated AI desktop application",
   "main": "./out/main/index.js",
   "author": "tomysh",
@@ -22,8 +22,6 @@
     "electron:generate-icons": "electron-icon-builder --input=./resources/OpenStarry.png --output=build --flatten"
   },
   "dependencies": {
-    "@oai/cua": "file:vendor/computer-use/source/packages/@oai/cua",
-    "@oai/sky": "file:vendor/computer-use/source/packages/@oai/sky",
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/lang-python": "^6.2.1",
     "@codemirror/search": "^6.7.0",
@@ -32,6 +30,8 @@
     "@electron-toolkit/utils": "^4.0.0",
     "@element-plus/icons-vue": "^2.3.2",
     "@fsegurai/codemirror-theme-github-light": "^6.2.5",
+    "@oai/cua": "file:vendor/computer-use/source/packages/@oai/cua",
+    "@oai/sky": "file:vendor/computer-use/source/packages/@oai/sky",
     "axios": "^1.13.5",
     "cherry-markdown": "^0.10.3",
     "chokidar": "^5.0.0",
@@ -57,6 +57,7 @@
   "devDependencies": {
     "@electron-toolkit/eslint-config": "^2.0.0",
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
+    "@openstarry/workbench": "file:../../SHARED/workbench",
     "@vitejs/plugin-vue": "^6.0.0",
     "electron": "^37.2.3",
     "electron-builder": "^25.1.8",

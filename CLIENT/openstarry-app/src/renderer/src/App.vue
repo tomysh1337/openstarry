@@ -1,6 +1,6 @@
 <template>
   <div class="app-wrapper">
-    <div v-if="runtimeStatus.phase !== 'ready'" class="startup-overlay">
+    <div v-if="runtimeStatus.phase !== 'ready' && !localWorkspacePage" class="startup-overlay">
       <img class="startup-logo" :src="appIcon" alt="OpenStarry NextGen" />
       <div class="startup-title">OpenStarry NextGen</div>
       <div class="startup-message">{{ runtimeStatus.message }}</div>
@@ -11,6 +11,7 @@
         :show-text="false"
       />
       <el-button v-else type="primary" @click="retryRuntime">诊断并重试</el-button>
+      <el-button @click="router.push('/idePage')">进入 IDE 工作区</el-button>
     </div>
     <el-config-provider :locale="lacale" :message="config">
       <div class="common-layout">
@@ -39,7 +40,7 @@
           </el-header>
 
           <el-main class="main-window">
-            <div v-if="runtimeStatus.phase === 'ready'" class="page-content">
+            <div v-if="runtimeStatus.phase === 'ready' || localWorkspacePage" class="page-content">
               <router-view v-slot="{ Component }">
                 <keep-alive>
                   <component :is="Component" />
@@ -54,7 +55,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, getCurrentInstance, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, getCurrentInstance, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { ConfirmDialog } from './views/component/comp/confirmDialog.js'
@@ -74,6 +75,7 @@ const maximize = () => window.electron.ipcRenderer.send('window-maximize')
 const close = () => window.electron.ipcRenderer.send('window-close')
 const store = useAppCacheData()
 const router = useRouter()
+const localWorkspacePage = computed(() => ['/idePage', '/settingPage'].includes(router.currentRoute.value.path))
 const OpenStarryIcon = ref<HTMLImageElement | null>(null)
 function playSpin() {
   const el = OpenStarryIcon.value

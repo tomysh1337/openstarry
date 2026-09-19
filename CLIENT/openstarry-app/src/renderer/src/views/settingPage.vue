@@ -313,6 +313,7 @@
           </div>
         </div>
 
+        <div class="setting-group"><div ref="ideToolsHost" /></div>
         <!-- 组4: AI设置 -->
         <div class="setting-group">
           <div class="group-divider">
@@ -961,11 +962,18 @@ import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import HomePage from './homePage.vue'
+import { mountToolSettings } from '@openstarry/workbench/settings'
+import '@openstarry/workbench/style.css'
 import { useAppCacheData } from '../store/app'
 import { OpenStarry_client_version, defaultCards, setHighlightTheme } from '../store/globalData.js'
 import { ConfirmDialog } from './component/comp/confirmDialog.js'
 
 const store = useAppCacheData()
+const ideToolsHost = ref(null)
+watch(ideToolsHost, element => { if (element) mountToolSettings(element, { desktop: true, notify: message => ElMessage({ message, duration: 5000 }), request: async ({ signal, ...value }) => {
+  signal?.throwIfAborted(); const id = crypto.randomUUID(); const abort = () => window.api.ide.cancelHttp({ id }); signal?.addEventListener('abort', abort, { once: true })
+  try { return await window.api.ide.http({ id, ...value }) } finally { signal?.removeEventListener('abort', abort) }
+} }) })
 const desktopSettings = ref({
   closeBehavior: 'tray',
   launchAtLogin: false,

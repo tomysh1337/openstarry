@@ -23,6 +23,8 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()]
   },
   renderer: {
+    build: { assetsInlineLimit: 0 },
+    server: { fs: { allow: [root, resolve(root, '../../SHARED/workbench')] } },
     resolve: {
       alias: {
         '@renderer': resolve(root, 'src/renderer/src'),

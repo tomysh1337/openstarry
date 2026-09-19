@@ -1,5 +1,6 @@
 import { conversations, messages, putRecords, databaseName, apiKey } from './syncClient.js'
 import { completeChat } from './chatClient.js'
+import { loadToolSettings } from '@openstarry/workbench/settings'
 export const conversationRecord = payload => ({ id: 'conversation:' + payload.conversation_uid, kind: 'conversation', payload })
 export const messageRecord = payload => ({ id: 'message:' + payload.conversation_uid + ':' + payload.sync_id, kind: 'message', payload })
 export function parseExtra(message) { try { return typeof message.extra === 'string' ? JSON.parse(message.extra) : message.extra || {} } catch { return {} } }
@@ -42,7 +43,8 @@ export async function sendMessage({ conversationId, text, provider, model, prefs
   try {
     const requestMessages = context.map(item => ({ role: item.role === 'human' ? 'user' : 'assistant', content: item.content }))
     if (prefs?.rolePrompt?.definition) requestMessages.unshift({ role: 'system', content: prefs.rolePrompt.definition })
-    await completeChat({ provider, key: apiKey(provider.provider_id), model, messages: requestMessages, temperature: Number(prefs?.modelTemp ?? 50) * 0.02, signal,
+    const complete = loadToolSettings().enabled ? (await import('./agentAdapter.js')).mobileAgent : completeChat
+    await complete({ provider, key: apiKey(provider.provider_id), model, messages: requestMessages, temperature: Number(prefs?.modelTemp ?? 50) * 0.02, signal,
       onDelta: delta => {
         Object.assign(answer, delta); onChange?.(answer, false)
         if (Date.now() - lastSave > 800) { lastSave = Date.now(); const record = snapshot(); persistence = persistence.then(() => putRecords([record], name)); persistence.catch(() => {}) }

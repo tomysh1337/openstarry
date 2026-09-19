@@ -6,10 +6,10 @@ OpenStarry NextGen 是一款面向 Windows 10、Windows 11 和 Android 的本地
 
 请从 [GitHub Releases](https://github.com/tomysh1337/openstarry/releases) 下载最新版本：
 
-- `OpenStarry-NextGen-1.2.0-Setup.exe`：Windows 安装版，可选择安装目录。
-- `OpenStarry-NextGen-1.2.0-Portable.exe`：Windows 便携版。
-- `OpenStarry-Mobile-1.2.0.apk`：正式签名 Android 安装包，支持 Android 6.0 及以上。
-- `OpenStarry-Mobile-1.2.0-Compat.apk`：使用旧版调试签名，供已安装 1.1.x 的用户保留应用数据直接升级。两个签名系列分别升级，请按已安装版本选择。
+- `OpenStarry-NextGen-1.3.0-Setup.exe`：Windows 安装版，可选择安装目录。
+- `OpenStarry-NextGen-1.3.0-Portable.exe`：Windows 便携版。
+- `OpenStarry-Mobile-1.3.0.apk`：正式签名 Android 安装包，支持 Android 6.0 及以上。
+- `OpenStarry-Mobile-1.3.0-Compat.apk`：使用旧版调试签名，供已安装 1.1.x 的用户保留应用数据直接升级。两个签名系列分别升级，请按已安装版本选择。
 
 也可以直接打开 [OpenStarry 移动网页版](https://openstarry.154-219-110-177.sslip.io)。手机可先添加供应商、在本机填写 API 密钥后聊天；连接同步服务后，会话与配置会与电脑互通。记录保存在设备本地，断开同步仍然保留。
 
@@ -32,6 +32,12 @@ OpenStarry NextGen 是一款面向 Windows 10、Windows 11 和 Android 的本地
 - 阿里云、腾讯云和 Windows NTP 校时。
 - API 密钥使用 Windows 凭据加密，可选 Windows Hello 或主密码。
 - 自动检查 GitHub Release 更新。
+
+## IDE 与项目 Agent
+
+电脑和手机均提供 IDEA 风格工作区：项目树、多标签编辑、搜索、红绿审查、运行输出和项目 Agent。Agent 面板支持文件引用、模型切换、仅提问模式、Markdown、工具进度及本机会话历史。待审查代码在接受后保存。
+
+手机可本地运行 JavaScript 和预览网页；Python、Java、Node 项目可连接执行服务器。设置中可独立开启项目文件、执行、网页、知识检索、技能与 MCP 调用。使用说明见 [IDE 工作区](IDE/README.md)，MCP 部署与配置见 [MCP 说明](IDE/MCP.md)。IDE 项目和专属对话保存在本机，项目可用 ZIP 交换；普通聊天与通用配置继续跨设备同步。
 
 ## 开启聊天同步
 
@@ -62,7 +68,9 @@ Windows 数据默认保存在：
 Windows 桌面端需要 Node.js 22 和项目内置的 `uv.exe`：
 
 ```powershell
-cd CLIENT\openstarry-app
+cd SHARED\workbench
+npm.cmd ci
+cd ..\..\CLIENT\openstarry-app
 npm.cmd ci
 npm.cmd run dev
 ```

@@ -22,6 +22,10 @@ jobs:
           cache: npm
           cache-dependency-path: CLIENT/openstarry-app/package-lock.json
 
+      - name: Install shared IDE dependencies
+        working-directory: SHARED/workbench
+        run: npm ci
+
       - name: Install dependencies
         working-directory: CLIENT/openstarry-app
         run: npm ci

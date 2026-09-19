@@ -3,6 +3,18 @@ import { electronAPI } from '@electron-toolkit/preload'
 
 // Custom APIs for renderer
 const api = {
+  ide: {
+    open: () => ipcRenderer.invoke('ide:open'),
+    write: value => ipcRenderer.invoke('ide:write', value),
+    rename: value => ipcRenderer.invoke('ide:rename', value),
+    remove: value => ipcRenderer.invoke('ide:remove', value),
+    export: value => ipcRenderer.invoke('ide:export', value),
+    run: value => ipcRenderer.invoke('ide:run', value),
+    stop: value => ipcRenderer.invoke('ide:stop', value),
+    http: value => ipcRenderer.invoke('ide:http', value),
+    cancelHttp: value => ipcRenderer.invoke('ide:cancel-http', value),
+    onOutput: callback => subscribe('ide:output', callback)
+  },
   readData: (key) => ipcRenderer.invoke('readData', key),
   writeData: (key, value) => ipcRenderer.invoke('writeData', key, value),
   submitCase: (cid, content) => ipcRenderer.invoke('api:submit_case', cid, content),

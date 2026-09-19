@@ -31,7 +31,8 @@ services:
 
   mobile-web:
     build:
-      context: ../../MOBILE/openstarry-mobile
+      context: ../..
+      dockerfile: MOBILE/openstarry-mobile/Dockerfile
     restart: unless-stopped
     networks:
       - sync-network

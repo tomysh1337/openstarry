@@ -14,6 +14,7 @@ import { SecretVault } from './app/vault'
 import { SettingsStore } from './app/settingsStore'
 import { SyncManager } from './app/syncManager'
 import { registerSystemIpc } from './ipc/systemIpc'
+import { registerIdeIpc } from './ipc/ide'
 
 const localDataRoot = process.env.LOCALAPPDATA || app.getPath('appData')
 app.setPath('userData', process.env.OPENSTARRY_PROFILE_DIR || join(localDataRoot, 'OpenStarry NextGen'))
@@ -112,6 +113,7 @@ async function startApplication() {
     }
   })
 
+  registerIdeIpc(() => mainWindow)
   computerUseManager.startBridge()
   ntpClock.synchronize()
     .then(() => dataManager.maintain())

@@ -2,6 +2,13 @@
 // Add new pages here or push at runtime
 export const pageRegistry = [
   {
+    path: '/idePage',
+    name: 'ide-page',
+    title: 'IDE 工作区',
+    icon: 'Monitor',
+    component: () => import('@renderer/views/idePage.vue')
+  },
+  {
     path: '/assistPage',
     name: 'assist-page',
     title: '智能体',

@@ -1,0 +1,21 @@
+import { chromium, expect } from '@playwright/test'
+const browser = await chromium.launch({ channel: 'msedge', headless: true })
+const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
+const page = await context.newPage()
+page.on('pageerror', error => console.error(error.message)); page.on('requestfailed', request => console.error(request.url(), request.failure()?.errorText))
+try {
+  await page.goto(process.env.OPENSTARRY_MOBILE_URL || 'http://127.0.0.1:5179')
+  await page.evaluate(() => navigator.serviceWorker.ready)
+  await page.reload(); await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller))
+  await context.setOffline(true)
+  await page.reload()
+  await page.getByRole('navigation', { name: '主要导航' }).getByRole('button', { name: 'IDE', exact: true }).click()
+  console.log(await page.locator('.toast').textContent())
+  await page.getByRole('button', { name: '新建项目', exact: true }).first().click()
+  await page.getByLabel('回答或补充说明').fill('离线项目'); await page.getByRole('button', { name: '提交回答' }).click()
+  await page.locator('.cm-content').fill('console.log("OFFLINE_OK")'); await page.getByRole('button', { name: '保存', exact: true }).click()
+  await page.getByRole('navigation', { name: 'IDE 面板' }).getByRole('button', { name: '输出', exact: true }).click()
+  await page.getByLabel('运行命令', { exact: true }).fill('main.js'); await page.getByRole('button', { name: '▶ 运行', exact: true }).click()
+  await expect(page.getByLabel('运行输出')).toContainText('OFFLINE_OK', { timeout: 15000 })
+  console.log('Production offline IDE: first open, editor and sandbox execution passed')
+} finally { await browser.close() }
