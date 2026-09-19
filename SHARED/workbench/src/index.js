@@ -104,12 +104,21 @@ export async function mountWorkbench(host, options = {}) {
   runbar.append(command, runButton, stopButton, button('网页预览', previewCurrent), button('清空', () => { output.textContent = ''; preview.hidden = true }))
   const outputHead = node('div', 'os-output-head'); outputHead.append(node('span', '', '输出'), node('small', '', '运行与预览'), iconButton('收起输出', 'close', () => { root.classList.add('os-output-collapsed'); selectPanel('editor') }))
   outputPane.append(outputHead, runbar, output, preview); center.append(tabs, filebar, reviewbar, editorHost, outputPane)
-  const agentHead = node('div', 'os-pane-title os-agent-head'), agentTitle = node('strong', 'os-agent-title'); agentTitle.append(icon('agent'), node('span', '', 'Agent'))
+  const agentHead = node('div', 'os-pane-title os-agent-head'), agentTitle = node('strong', 'os-agent-title'); agentTitle.append(node('span', '', 'Agent'))
   const agentHeadActions = node('div', 'os-actions'); agentHeadActions.append(iconButton('会话历史', 'history', showHistory), iconButton('新的项目对话', 'plus', newAgentChat)); agentHead.append(agentTitle, agentHeadActions)
+  const sessionBar = node('div', 'os-agent-sessionbar')
+  const sessionTab = node('button', 'os-agent-session is-active', '项目对话'); sessionTab.type = 'button'; sessionTab.setAttribute('aria-label', '当前项目对话'); sessionTab.onclick = () => { history.hidden = true; agentInput.focus() }
+  sessionBar.append(sessionTab, node('span', 'os-agent-session-state', '本机'))
   const history = node('div', 'os-chat-history'); history.hidden = true
   const chat = node('div', 'os-agent-chat'); chat.setAttribute('aria-label', '项目 Agent 对话')
   const agentState = node('div', 'os-agent-state'); agentState.setAttribute('role', 'status')
   const questionDock = node('div', 'os-question-dock')
+  const agentStatusbar = node('div', 'os-agent-statusbar'); agentStatusbar.setAttribute('aria-label', 'Agent 任务状态')
+  const statusDetails = node('div', 'os-agent-status-details'); statusDetails.hidden = true
+  const statusTask = button('', () => { statusDetails.hidden = !statusDetails.hidden; renderAgentStatus() }, 'os-agent-status-item')
+  const statusSubagent = button('', () => { statusDetails.hidden = !statusDetails.hidden; renderAgentStatus() }, 'os-agent-status-item')
+  const statusEdits = button('', () => { if (Object.keys(workspace.proposals).length) selectPanel('review'); else { statusDetails.hidden = !statusDetails.hidden; renderAgentStatus() } }, 'os-agent-status-item')
+  agentStatusbar.append(statusTask, statusSubagent, statusEdits)
   const agentComposer = node('div', 'os-agent-composer'), contextChips = node('div', 'os-context-chips')
   const agentInput = node('textarea', 'os-agent-input'); agentInput.placeholder = '一起完成下一个想法…'; agentInput.setAttribute('aria-label', '项目 Agent 消息'); agentInput.rows = 3
   const agentSend = iconButton('发送', 'arrow', sendAgent, 'os-agent-send'), agentStop = iconButton('停止', 'stop', () => agentController?.abort(Error('Agent 已停止')), 'os-agent-send'); agentStop.hidden = true
@@ -125,7 +134,7 @@ export async function mountWorkbench(host, options = {}) {
   const agentButtons = node('div', 'os-composer-actions'); agentButtons.append(iconButton('引用当前文件', 'attach', () => { if (workspace.active) { references.add(workspace.active); renderReferences(); agentInput.focus() } }), agentMode.element, modelPicker.element, configureModel, agentStop, agentSend)
   agentComposer.append(contextChips, agentInput, agentButtons)
   const agentFoot = node('div', 'os-agent-foot', '修改先审查，再保存'); agentFoot.append(node('span', '', 'Ctrl + Enter'))
-  agentPane.append(agentHead, history, chat, agentState, questionDock, agentComposer, agentFoot)
+  agentPane.append(agentHead, sessionBar, history, chat, agentState, questionDock, agentStatusbar, statusDetails, agentComposer, agentFoot)
   const filesGrip = resizeGrip('files', '调整项目栏宽度', 160, 320, 210), agentGrip = resizeGrip('agent', '调整 Agent 栏宽度', 290, 560, 350)
   body.append(nav, filesPane, filesGrip, center, agentGrip, agentPane)
   const statusBar = node('footer', 'os-statusbar'), status = node('span', 'os-status', '项目保存在本机'), statusMeta = node('span', 'os-status-meta', 'UTF-8  ·  OpenStarry IDE'); status.setAttribute('role', 'status'); statusBar.append(icon('folder'), status, statusMeta)
@@ -248,16 +257,36 @@ export async function mountWorkbench(host, options = {}) {
       if (update.selectionSet) { const selection = update.state.selection.main; const line = update.state.doc.lineAt(selection.head); status.textContent = `${path} · ${line.number}:${selection.head - line.from + 1} · UTF-8` }
     })] }) })
   }
+  function renderAgentStatus() {
+    const changes = Object.values(workspace.proposals || {}).reduce((total, proposal) => {
+      const diff = diffLines(proposal.base || '', proposal.content || '')
+      return {
+        additions: total.additions + diff.filter(item => item.added).reduce((sum, item) => sum + item.count, 0),
+        deletions: total.deletions + diff.filter(item => item.removed).reduce((sum, item) => sum + item.count, 0),
+      }
+    }, { additions: 0, deletions: 0 })
+    const toolCount = workspace.chat.reduce((total, item) => total + (item.parts || []).filter(part => part.type === 'tool').length, 0)
+    const taskValue = agentController ? '运行中' : (workspace.chat.length ? '已完成' : '空闲')
+    statusTask.replaceChildren(icon('check'), node('span', '', '任务'), node('b', '', taskValue))
+    statusSubagent.replaceChildren(icon('agent'), node('span', '', '子 Agent'), node('b', '', '0'))
+    statusEdits.replaceChildren(icon('review'), node('span', '', '修改'), node('b', '', `+${changes.additions} −${changes.deletions}`))
+    statusDetails.replaceChildren(
+      node('div', '', agentController ? '当前回合正在运行，工具记录会显示在消息时间线中。' : '当前回合已停止运行。'),
+      node('div', '', `工具调用 ${toolCount} · 待审查文件 ${Object.keys(workspace.proposals || {}).length}`),
+    )
+  }
   function renderChat() {
     const nearBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 90
     chat.replaceChildren()
     if (!workspace.chat.length) {
-      const empty = node('div', 'os-agent-welcome'), mark = node('div', 'os-agent-mark'); mark.append(icon('agent'))
-      empty.append(mark, node('h2', '', '一起完成这个项目'), node('p', '', '从一段代码，或一个想法开始。'))
+      const empty = node('div', 'os-agent-welcome')
+      empty.append(node('span', 'os-agent-kicker', 'PROJECT AGENT'), node('h2', '', '一起完成这个项目'), node('p', '', '从一段代码，或一个想法开始。'))
       const suggestions = node('div', 'os-agent-suggestions')
       for (const [symbol, title, prompt] of [['search', '梳理这个项目', '请阅读项目，说明主要结构和关键流程。'], ['review', '检查代码问题', '请审查当前项目，找出可复现的问题并提出修改建议。'], ['editor', '实现一个新功能', '我想为项目添加一个功能，请先问清楚关键需求。']]) { const item = button('', () => { agentInput.value = prompt; agentInput.focus() }); item.append(icon(symbol), node('span', '', title), icon('chevron')); suggestions.append(item) }
       empty.append(suggestions); chat.append(empty)
     }
+    const firstPrompt = workspace.chat.find(item => item.role === 'user')?.content?.trim()
+    sessionTab.textContent = firstPrompt ? firstPrompt.slice(0, 34) : '项目对话'
     for (const item of workspace.chat) {
       const message = node('article', 'os-chat-message os-role-' + item.role)
       const label = node('div', 'os-message-label', item.role === 'user' ? '你' : 'OpenStarry'); if (item.role !== 'user') label.prepend(icon('agent')); message.append(label)
@@ -281,6 +310,7 @@ export async function mountWorkbench(host, options = {}) {
       if (!parts.length) message.append(node('div', 'os-thinking', '正在思考'))
       chat.append(message)
     }
+    renderAgentStatus()
     if (nearBottom || !agentController) chat.scrollTop = chat.scrollHeight
   }
   function renderAll() { renderTree(); renderTabs(); renderEditor(); renderChat(); command.value = workspace.command }

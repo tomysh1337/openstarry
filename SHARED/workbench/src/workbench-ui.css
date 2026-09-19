@@ -212,6 +212,46 @@
 .os-ide .os-agent-input{height:50px;min-height:40px}
 .os-agent-composer{margin-bottom:6px}
 .os-question-dock{max-height:40%}}
+/* Agent pane follows the compact JetBrains chat-tool-window rhythm: a quiet
+   session strip, flat tool rows and a bordered composer. No third-party
+   product mark is rendered; OpenStarry keeps its own text branding. */
+.os-agent-head{height:39px;padding:4px 10px;background:var(--ide-bg)}
+.os-agent-title{font-size:12px;letter-spacing:.01em}
+.os-agent-title svg{display:none}
+.os-agent-sessionbar{display:flex;align-items:center;gap:8px;min-height:31px;padding:0 10px;background:var(--ide-bg);border-bottom:1px solid var(--ide-line);overflow:hidden}
+.os-agent-session{display:block;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:4px 9px;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--ide-muted);font:11px inherit;text-align:left;cursor:pointer}
+.os-agent-session:hover{color:var(--ide-text);background:var(--ide-soft)}
+.os-agent-session.is-active{color:var(--ide-text);background:var(--ide-panel);border-color:var(--ide-line)}
+.os-agent-session-state{color:var(--ide-muted);font-size:10px}
+.os-agent-chat{padding:0 14px}
+.os-agent-welcome{padding:34px 2px 20px;text-align:left}
+.os-agent-kicker{display:block;color:var(--agent-accent);font:10px/1.4 'Cascadia Code',Consolas,monospace;letter-spacing:1.3px}
+.os-agent-welcome h2{font-size:16px;margin:8px 0 6px}
+.os-agent-welcome p{font-size:12px;line-height:1.65}
+.os-agent-suggestions{margin-top:22px;gap:5px}
+.os-agent-suggestions button{padding:9px 10px;border-radius:5px;background:transparent}
+.os-chat-message{padding:14px 0;border-bottom:1px solid var(--ide-line);font-size:12px;line-height:1.7}
+.os-chat-message:last-child{border-bottom:0}
+.os-role-user{margin:11px 0 0;padding:10px 12px;border:0;border-left:2px solid var(--agent-accent);border-radius:0;background:var(--ide-panel)}
+.os-role-user .os-message-label{margin-bottom:4px;color:var(--ide-muted);font-size:11px}
+.os-role-assistant{padding-left:2px}
+.os-role-assistant .os-message-label{display:none}
+.os-message-content pre{border-radius:5px;background:var(--ide-bg)}
+.os-tool-event{margin:7px 0;border:0;border-top:1px solid var(--ide-line);border-bottom:1px solid var(--ide-line);border-radius:0;background:transparent}
+.os-tool-event summary{padding:6px 2px;font-size:11px}
+.os-tool-event pre{padding:0 4px 7px;color:var(--ide-muted);font-size:10px}
+.os-agent-composer{margin:8px 10px 0;padding:8px;border-radius:7px;box-shadow:none}
+.os-ide .os-agent-input{height:78px;min-height:48px;font-size:12px}
+.os-agent-foot{padding:6px 12px 9px}
+.os-agent-statusbar{display:flex;align-items:center;gap:3px;padding:4px 10px 0;min-width:0;flex-shrink:0}
+.os-agent-status-item{display:inline-flex;align-items:center;gap:4px;min-width:0;min-height:25px;padding:2px 6px!important;border:0!important;border-radius:4px!important;background:transparent!important;color:var(--ide-muted)!important;font-size:10px!important}
+.os-agent-status-item:hover{background:var(--ide-soft)!important;color:var(--ide-text)!important}
+.os-agent-status-item svg{width:13px;height:13px;color:var(--agent-accent)}
+.os-agent-status-item span{white-space:nowrap}
+.os-agent-status-item b{font-weight:500;color:var(--ide-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.os-agent-status-details{margin:2px 10px 0;padding:7px 9px;border:1px solid var(--ide-line);border-radius:5px;background:var(--ide-bg);color:var(--ide-muted);font-size:10px;line-height:1.6;flex-shrink:0}
+.os-agent-status-details div+div{margin-top:2px}
+@media(max-width:620px){.os-agent-sessionbar{min-height:36px}.os-agent-session{min-height:30px}.os-agent-chat{padding:0 14px}.os-agent-welcome{padding-top:28px}.os-agent-composer{margin-left:10px;margin-right:10px}.os-ide .os-agent-input{height:66px}}
 @media(prefers-reduced-motion:no-preference){.os-ide button{transition:background 140ms ease,color 140ms ease}
 .os-agent-composer{transition:border-color 160ms,box-shadow 160ms}
 .os-agent-welcome{animation:os-appear 300ms cubic-bezier(.2,.8,.2,1)}
