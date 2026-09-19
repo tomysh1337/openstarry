@@ -8,7 +8,7 @@
         <!-- 左侧菜单 -->
         <el-aside class="menu-aside">
           <el-menu
-            default-active="0"
+            :default-active="currentMenu"
             class="el-menu-vertical-data"
             @select="handleSelect"
           >
@@ -48,7 +48,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onActivated, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import HomePage from './homePage.vue'
 import { useAppCacheData } from '../store/app'
 import { useAuthStore } from '../store/auth'
@@ -65,6 +66,9 @@ const store = useAppCacheData()
 
 // 当前显示的页面
 const currentPage = ref('ProviderPage')
+const route = useRoute()
+const currentMenu = computed(() => String(['ProviderPage', 'RagPage', 'SkillPage', 'RolePage', 'McpPage'].indexOf(currentPage.value)))
+onActivated(() => { if (route.query.section === 'providers') currentPage.value = 'ProviderPage' })
 
 // 菜单选择事件
 const handleSelect = (key: string) => {

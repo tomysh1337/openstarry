@@ -34,4 +34,44 @@ button { background: #304d40; color: white; border: 0; border-radius: 6px; paddi
   workspace.open('index.html')
   await saveWorkspace(workspace)
 }
-await mountWorkbench(document.querySelector('#workbench'), { theme: 'dark' })
+const host = document.querySelector('#workbench'), settings = document.querySelector('#provider-settings')
+const form = document.querySelector('#provider-form'), error = document.querySelector('#provider-error')
+const configKey = 'openstarry.ide.demo.provider', secretKey = 'openstarry.ide.demo.key'
+let provider = null
+try { provider = JSON.parse(localStorage.getItem(configKey) || 'null') } catch {}
+const models = () => Array.isArray(provider?.models) ? provider.models : []
+const getKey = () => sessionStorage.getItem(secretKey) || ''
+function showProviders() {
+  settings.dataset.theme = host.querySelector('.os-ide')?.dataset.theme || 'dark'
+  form.elements.providerName.value = provider?.name || ''
+  form.elements.endpoint.value = provider?.endpoint || 'https://api.openai.com/v1'
+  form.elements.apiKey.value = getKey()
+  form.elements.models.value = models().join('\n')
+  error.textContent = ''
+  host.hidden = true; settings.hidden = false; form.elements.providerName.focus()
+}
+function returnToIde() {
+  settings.hidden = true; host.hidden = false
+  workbench.refresh()
+  host.querySelector('.os-agent-input')?.focus()
+}
+const workbench = await mountWorkbench(host, {
+  theme: 'dark', configureProvider: showProviders,
+  getModel: () => ({ endpoint: provider?.endpoint, model: provider?.model, key: getKey() }),
+  getModels: () => models().map(value => ({ value, label: value, selected: value === provider?.model })),
+  selectModel: value => { provider.model = value; localStorage.setItem(configKey, JSON.stringify(provider)) },
+})
+document.querySelector('#back-to-ide').onclick = returnToIde
+form.onsubmit = event => {
+  event.preventDefault()
+  try {
+    const endpoint = new URL(form.elements.endpoint.value.trim())
+    if (!['https:', 'http:'].includes(endpoint.protocol) || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) throw Error('请填写不含凭据或参数的 HTTP / HTTPS 接口地址')
+    const name = form.elements.providerName.value.trim()
+    const list = [...new Set(form.elements.models.value.split(/\r?\n/).map(value => value.trim()).filter(Boolean))]
+    if (!name || !list.length) throw Error('请填写供应商名称和至少一个模型 ID')
+    const next = { name, endpoint: endpoint.href.replace(/\/+$/, ''), models: list, model: list.includes(provider?.model) ? provider.model : list[0] }
+    localStorage.setItem(configKey, JSON.stringify(next)); sessionStorage.setItem(secretKey, form.elements.apiKey.value.trim())
+    provider = next; returnToIde()
+  } catch (cause) { error.textContent = cause.message }
+}

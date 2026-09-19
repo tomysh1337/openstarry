@@ -3,6 +3,9 @@
 .os-ide .os-picker-chevron{width:12px;height:12px;opacity:.65;transform:rotate(90deg)}
 .os-ide .os-picker[aria-expanded=true]{background:var(--ide-soft)}
 .os-ide .os-picker[aria-expanded=true] .os-picker-chevron{transform:rotate(-90deg)}
+.os-ide .os-configure-model{color:var(--ide-muted)}
+.os-ide .os-configure-model:hover{color:var(--ide-text)}
+.os-ide .os-configure-model svg{width:13px;height:13px;opacity:.7}
 .os-picker-menu{position:fixed;z-index:10000;display:flex;flex-direction:column;box-sizing:border-box;padding:5px;background:var(--ide-bg);color:var(--ide-text);border:1px solid var(--ide-line);border-radius:10px;box-shadow:0 12px 40px #0003,0 2px 8px #0002;overflow:hidden;font-size:13px;line-height:1.5;text-align:left}
 .os-picker-menu *{box-sizing:border-box}
 .os-picker-heading{padding:7px 9px 8px;color:var(--ide-muted);font-size:11px;flex-shrink:0}

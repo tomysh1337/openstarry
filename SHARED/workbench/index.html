@@ -7,6 +7,21 @@
   </head>
   <body>
     <main id="workbench"></main>
+    <section id="provider-settings" class="demo-settings" aria-labelledby="provider-title" hidden>
+      <div class="demo-settings-heading">
+        <div><p>OPENSTARRY IDE</p><h1 id="provider-title">供应商配置</h1></div>
+        <button type="button" id="back-to-ide">返回 IDE</button>
+      </div>
+      <p class="demo-note">配置 OpenAI 兼容接口和模型，保存后回到项目继续使用。</p>
+      <form id="provider-form">
+        <label>供应商名称<input name="providerName" required maxlength="80" placeholder="例如：我的供应商"></label>
+        <label>接口地址<input name="endpoint" type="url" required placeholder="https://api.openai.com/v1" spellcheck="false"></label>
+        <label>API 密钥（仅当前预览会话）<input name="apiKey" type="password" autocomplete="off" placeholder="本地服务可留空"></label>
+        <label>模型 ID（每行一个）<textarea name="models" required rows="5" placeholder="填入供应商支持的模型 ID" spellcheck="false"></textarea></label>
+        <p id="provider-error" role="alert"></p>
+        <button type="submit" class="demo-primary">保存并返回 IDE</button>
+      </form>
+    </section>
     <script type="module" src="/demo/main.js"></script>
   </body>
 </html>

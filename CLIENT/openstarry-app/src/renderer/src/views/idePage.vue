@@ -5,14 +5,15 @@
   </el-container>
 </template>
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, onMounted, onActivated, onBeforeUnmount, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
 import HomePage from './homePage.vue'
 import { useAppCacheData } from '../store/app'
 import { useAuthStore } from '../store/auth'
 import { mountWorkbench } from '@openstarry/workbench'
 import '@openstarry/workbench/style.css'
-const store = useAppCacheData(), auth = useAuthStore(), host = ref(null)
+const store = useAppCacheData(), auth = useAuthStore(), host = ref(null), router = useRouter()
 let workbench
 const endpoints = { openai: 'https://api.openai.com/v1', deepseek: 'https://api.deepseek.com/v1', ollama: 'http://localhost:11434/v1', moonshot: 'https://api.moonshot.cn/v1', qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1', google: 'https://generativelanguage.googleapis.com/v1beta/openai' }
 async function getModel() {
@@ -54,6 +55,7 @@ async function run({ signal, onOutput, ...value }) {
 onMounted(async () => {
   try {
     workbench = await mountWorkbench(host.value, { theme: store.config.dark_theme ? 'dark' : 'light', getModel, getModels, selectModel: value => store.saveAppConfig('modelName', value), request,
+      configureProvider: () => router.push({ path: '/dataPage', query: { section: 'providers' } }),
       notify: message => ElMessage({ message, duration: 5000 }),
       notifyQuestion: question => window.api.system.notifyQuestion({ id: crypto.randomUUID(), question, title: 'IDE Agent 需要你的回答' }),
       native: { open: () => window.api.ide.open(), write: value => window.api.ide.write(value), rename: value => window.api.ide.rename(value), remove: value => window.api.ide.remove(value), run },
@@ -62,6 +64,7 @@ onMounted(async () => {
   } catch (error) { ElMessage.error(error.message) }
 })
 watch(() => store.config.dark_theme, value => workbench?.setTheme(value ? 'dark' : 'light'))
+onActivated(() => workbench?.refresh())
 onBeforeUnmount(() => workbench?.destroy())
 </script>
 <style scoped>

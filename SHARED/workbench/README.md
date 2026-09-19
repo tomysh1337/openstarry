@@ -13,7 +13,9 @@ npm ci
 npm run dev -- --host 127.0.0.1 --port 5180
 ```
 
-打开终端显示的本地地址。点击「网页预览」运行示例；可以修改 HTML、CSS、JavaScript，再次预览。此示例保存在该本地地址的浏览器存储中。它没有预置模型、API 密钥或服务器连接；连接 Agent 时由宿主通过 `mountWorkbench` 的 `getModel`、`getModels`、`selectModel` 提供配置。
+打开终端显示的本地地址。点击「网页预览」运行示例；可以修改 HTML、CSS、JavaScript，再次预览。此示例保存在该本地地址的浏览器存储中。点击 Agent 底部「请先配置模型」进入供应商配置，保存后返回 IDE；未保存时也可直接返回。示例的 API 密钥只保留在当前浏览器预览会话中。没有预置模型、API 密钥或服务器连接。
+
+接入其他宿主时，用 `mountWorkbench` 的 `configureProvider` 处理供应商页面跳转，用 `getModel`、`getModels`、`selectModel` 提供模型配置。桌面宿主进入供应商页面，手机宿主打开供应商页。
 
 ```sh
 npm test

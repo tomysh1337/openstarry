@@ -43,6 +43,7 @@ async function showIde() {
   if (!workbench) {
     const [{ mountWorkbench }, { mobileRequest, exportMobileFile }] = await Promise.all([import('@openstarry/workbench'), import('./agentAdapter.js')])
     workbench = await mountWorkbench(ideView, { theme: prefs.dark_theme ? 'dark' : 'light', notify, request: mobileRequest, exportFile: exportMobileFile,
+      configureProvider: showProviders,
       getModel: async () => { await refreshModels(); if (!modelSelect.value) return {}; const [id, model] = JSON.parse(modelSelect.value); return { endpoint: providerList.find(item => item.provider_id === id)?.endpoint, key: apiKey(id), model, temperature: Number(prefs.modelTemp ?? 50) * .02, rolePrompt: prefs.rolePrompt?.definition || '' } },
       getModels: () => [...modelSelect.options].filter(option => option.value).map(option => ({ value: option.value, label: option.textContent, selected: option.selected })),
       selectModel: async value => { modelSelect.value = value; await modelSelect.onchange() }

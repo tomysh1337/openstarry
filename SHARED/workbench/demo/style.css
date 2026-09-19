@@ -1,4 +1,16 @@
 html,body{height:100%;margin:0;background:#1e1f22}
 body{box-sizing:border-box;padding:12px}
 #workbench{height:100%;min-height:0;min-width:0}
+.demo-settings{--demo-bg:#2b2d30;--demo-field:#1e1f22;--demo-text:#dfe1e5;--demo-muted:#9da1ad;--demo-line:#45474d;box-sizing:border-box;height:100%;overflow:auto;padding:32px max(20px,calc((100% - 640px)/2));background:var(--demo-bg);color:var(--demo-text);font:13px/1.6 'Segoe UI','Microsoft YaHei',sans-serif;border-radius:9px}
+.demo-settings[data-theme=light]{--demo-bg:#f7f8fa;--demo-field:#fff;--demo-text:#27282e;--demo-muted:#666b78;--demo-line:#d9dce4}
+.demo-settings-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.demo-settings-heading p{margin:0;color:var(--demo-muted);font-size:10px;letter-spacing:1.5px}
+.demo-settings h1{font-size:23px;font-weight:500;margin:6px 0}
+.demo-note{color:var(--demo-muted);margin:12px 0 24px}
+.demo-settings label{display:flex;flex-direction:column;gap:7px;margin:18px 0}
+.demo-settings input,.demo-settings textarea{box-sizing:border-box;width:100%;border:1px solid var(--demo-line);border-radius:6px;padding:10px 12px;color:var(--demo-text);background:var(--demo-field);font:inherit;resize:vertical}
+.demo-settings button{border:1px solid var(--demo-line);border-radius:6px;padding:9px 14px;background:var(--demo-field);color:var(--demo-text);font:inherit;cursor:pointer}
+.demo-settings .demo-primary{background:#3574f0;color:white;border-color:#3574f0}
+.demo-settings :focus-visible{outline:2px solid #6b9bfa;outline-offset:2px}
+#provider-error{color:#e98181}
 @media(max-width:620px){body{padding:0}.os-ide{border-radius:0}}

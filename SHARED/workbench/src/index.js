@@ -118,7 +118,11 @@ export async function mountWorkbench(host, options = {}) {
     { value: 'ask', label: '仅提问', icon: 'chat', description: '讨论和解释代码，不调用工具或修改文件。' },
   ] })
   const modelPicker = createPicker({ label: '项目 Agent 模型', className: 'os-agent-model', placement: 'above', onChange: value => Promise.resolve(options.selectModel?.(value)).then(refreshModels).catch(report) })
-  const agentButtons = node('div', 'os-composer-actions'); agentButtons.append(iconButton('引用当前文件', 'attach', () => { if (workspace.active) { references.add(workspace.active); renderReferences(); agentInput.focus() } }), agentMode.element, modelPicker.element, agentStop, agentSend)
+  const configureModel = button('', async () => { await options.configureProvider?.(); if (!disposed) await refreshModels() }, 'os-picker os-agent-model os-configure-model')
+  configureModel.append(node('span', 'os-picker-caption', '请先配置模型'), icon('settings'))
+  configureModel.title = '前往供应商配置'; configureModel.disabled = !options.configureProvider
+  modelPicker.element.hidden = true
+  const agentButtons = node('div', 'os-composer-actions'); agentButtons.append(iconButton('引用当前文件', 'attach', () => { if (workspace.active) { references.add(workspace.active); renderReferences(); agentInput.focus() } }), agentMode.element, modelPicker.element, configureModel, agentStop, agentSend)
   agentComposer.append(contextChips, agentInput, agentButtons)
   const agentFoot = node('div', 'os-agent-foot', '修改先审查，再保存'); agentFoot.append(node('span', '', 'Ctrl + Enter'))
   agentPane.append(agentHead, history, chat, agentState, questionDock, agentComposer, agentFoot)
@@ -145,6 +149,9 @@ export async function mountWorkbench(host, options = {}) {
     const current = await options.getModel?.(), models = await options.getModels?.() || (current?.model ? [{ value: current.model, label: current.model, selected: true }] : [])
     modelPicker.setItems(models.length ? models : [{ value: '', label: '请先配置模型' }], models.find(model => model.selected)?.value ?? models[0]?.value ?? '')
     modelPicker.disabled = !models.length || !options.selectModel || Boolean(agentController)
+    modelPicker.element.hidden = !models.length
+    configureModel.hidden = Boolean(models.length)
+    configureModel.disabled = !options.configureProvider || Boolean(agentController)
   }
   function renderReferences() {
     contextChips.replaceChildren(...[...references].map(path => { const chip = node('span', 'os-context-chip'); chip.append(icon('editor'), node('span', '', path), iconButton('移除引用 ' + path, 'close', () => { references.delete(path); renderReferences() })); chip.title = path; return chip }))
