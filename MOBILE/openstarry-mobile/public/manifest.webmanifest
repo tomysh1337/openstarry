@@ -1,10 +1,10 @@
 {
-  "name": "OpenStarry",
+  "name": "OpenStarry NextGen",
   "short_name": "OpenStarry",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#081113",
-  "theme_color": "#0b1719",
+  "background_color": "#f5f5f9",
+  "theme_color": "#f5f5f9",
   "icons": [
     {
       "src": "/OpenStarry.png",

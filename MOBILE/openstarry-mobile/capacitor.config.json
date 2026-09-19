@@ -1,6 +1,6 @@
 {
   "appId": "com.tomysh.openstarry.mobile",
-  "appName": "OpenStarry",
+  "appName": "OpenStarry NextGen",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"
