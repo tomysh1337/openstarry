@@ -113,7 +113,7 @@ async function startApplication() {
     }
   })
 
-  registerIdeIpc(() => mainWindow)
+  const ideRuntime = registerIdeIpc(() => mainWindow)
   computerUseManager.startBridge()
   ntpClock.synchronize()
     .then(() => dataManager.maintain())
@@ -159,6 +159,7 @@ async function startApplication() {
     cleanupStarted = true
     event.preventDefault()
     Promise.allSettled([
+      ideRuntime.stop(),
       backendManager.stop(),
       computerUseManager.stop(),
       syncManager.stop()

@@ -3,7 +3,7 @@
     <div class="q-card-wrapper">
       <div class="q-card">
         <!-- Left: preview content -->
-        <div class="q-card-body" :class="{'is_active': store.current_history_id === history.id}">
+        <div class="q-card-body" :class="{'is_active': active ?? store.current_history_id === history.id}">
           <transition name="star-pop">
             <div class="q-card-status">
               <span
@@ -32,6 +32,7 @@
             </div>
           </transition>
           <span class="q-preview-text">{{ history.preview || '暂无对话内容' }}</span>
+          <span v-if="history.source === 'chatgpt-web'" class="q-web-source" title="GPT 网页版 · 历史暂存本机">网页 · 本机</span>
         </div>
 
         <!-- Right: actions -->
@@ -65,6 +66,7 @@
         v-if="isShowMenu"
         ref="menuRef"
         type="ai"
+        :hide-workspace="history.source === 'chatgpt-web'"
         :style="menuStyle"
         @close-menu="closePopMenu"
         @delete-history="handleDeleteCard"
@@ -81,6 +83,7 @@ import HistoryCardMenu from './comp/historyCardMenu.vue'
 import { useAuthStore } from '../../../store/auth'
 import { useAppCacheData } from '../../../store/app'
 import { InputDialog } from '../comp/inputDialog'
+import { ElMessage } from 'element-plus'
 
 export interface ChatHistory {
   id: number | string
@@ -95,13 +98,14 @@ export interface ChatHistory {
   isGenerating?: boolean   // 当前是否正在生成
   hasNewMessage?: boolean  // 是否有未读新消息
   workspace?: string
+  source?: string
 }
 
 const showNewMessage = computed(() => {
   return !!props.history.hasNewMessage && !props.history.isGenerating
 })
 
-const props = defineProps<{ history: ChatHistory }>()
+const props = withDefaults(defineProps<{ history: ChatHistory; active?: boolean; localAction?: (id: string, values: Record<string, unknown>) => Promise<void> }>(), { active: undefined })
 
 const emit = defineEmits<{
   (e: "rename-history", history_id: string, new_title: string): void
@@ -168,6 +172,13 @@ function closePopMenu() {
 }
 
 async function onStarClick() {
+  if (props.history.source === 'chatgpt-web') {
+    try {
+      if (!props.localAction) throw Error('本机历史尚未加载')
+      await props.localAction(String(props.history.id), { star: !props.history.star })
+    } catch (error) { ElMessage.error(error.message) }
+    return
+  }
   props.history.star = !props.history.star
   if (props.history.star) emit('star-history', props.history.id)
   try {
@@ -215,7 +226,7 @@ const handleReEditPreview = async (data) => {
     placeholder: props.history.preview,
     defaultValue: props.history.preview,
   }).then(value => {
-    props.history.preview = value
+    if (props.history.source !== 'chatgpt-web') props.history.preview = value
     emit('rename-history', props.history.id, value)
   }).catch(() => {
   })
@@ -298,6 +309,7 @@ const handleConnectProject = async () => {
   white-space: nowrap;
   width: 230px;
 }
+.q-web-source { font-size: 10px; opacity: .7; white-space: nowrap; flex-shrink: 0; }
 
 .q-card:hover .q-preview-text {
   width: 170px;

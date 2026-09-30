@@ -11,6 +11,12 @@ export function projectTools(settings) {
   return tools
 }
 export function readablePage(text) { return String(text).replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 18000) }
+export function toolDetail(value) {
+  const text = typeof value === 'string' ? value : JSON.stringify(value, (key, value) => /^(authorization|cookie|password|secret|api[_-]?key|access[_-]?token|token)$/i.test(key) ? '[已隐藏]' : value, 2) ?? ''
+  const redacted = text.replace(/\b(Bearer\s+)[\w.+/=-]+/gi, '$1[已隐藏]')
+    .replace(/((?:api[_-]?key|access[_-]?token|password|secret|token)["']?\s*[:=]\s*["']?)[^\s,"'&}]+/gi, '$1[已隐藏]')
+  return redacted.length > 20000 ? redacted.slice(0, 20000) + '\n…详情已截断（20,000 字符）' : redacted
+}
 function parseRpc(text) {
   if (typeof text !== 'string') return text
   try { return JSON.parse(text) } catch {}
@@ -51,21 +57,31 @@ export async function runAgent({ messages, settings, workspace, complete, reques
     const allowed = new Set(tools.map(entry => entry.function.name))
     for (let turn = 0; turn < settings.maxTurns; turn++) {
       runSignal.throwIfAborted()
-      const answer = await complete({ messages: context, tools, signal: runSignal })
+      let streamedText = false
+      const answer = await complete({ messages: context, tools, signal: runSignal,
+        onDelta: event => {
+          runSignal.throwIfAborted()
+          if (event.type === 'text') streamedText = true
+          onEvent({ ...event, id: `${turn}:${event.type}`, delta: true })
+        },
+        onNotice: text => onEvent({ type: 'notice', text }),
+      })
       runSignal.throwIfAborted()
       const calls = answer.tool_calls || []
       if (calls.length > 16) throw Error('单回合工具调用超过上限')
-      if (answer.content) { finalText += (finalText ? '\n\n' : '') + answer.content; onEvent({ type: 'text', text: answer.content }) }
+      if (answer.content) { finalText += (finalText ? '\n\n' : '') + answer.content; if (!streamedText) onEvent({ type: 'text', id: `${turn}:text`, text: answer.content }) }
       if (!calls.length) return { content: finalText, turns: turn + 1 }
-      context.push({ role: 'assistant', content: answer.content || null, tool_calls: calls })
+      context.push({ role: 'assistant', content: answer.content || null, tool_calls: calls, ...(answer.reasoning_content ? { reasoning_content: answer.reasoning_content } : {}) })
       for (const call of calls) {
         runSignal.throwIfAborted(); let result
         const name = call.function.name
-        const event = { type: 'tool', id: `${turn}:${call.id}`, name, label: mcp?.label(name) || name }
+        const started = Date.now()
+        const event = { type: 'tool', id: `${turn}:${call.id}`, name, label: mcp?.label(name) || name, started, input: toolDetail(call.function.arguments || '{}') }
+        let output = ''
         try {
           if (!allowed.has(name)) throw Error('此工具未开启')
           const args = JSON.parse(call.function.arguments || '{}')
-          event.path = args.path; event.detail = String(args.path || args.command || args.query || args.question || '')
+          event.path = args.path; event.detail = toolDetail(String(args.path || args.command || args.query || args.question || '')); event.input = toolDetail(args)
           onEvent({ ...event, phase: 'running' })
           switch (name) {
             case 'ask_user': result = await ask(args, runSignal); break
@@ -74,7 +90,10 @@ export async function runAgent({ messages, settings, workspace, complete, reques
             case 'propose_file': workspace.propose(args.path, args.content); await onProposal(args.path); result = { status: 'awaiting_review', path: args.path, message: 'Saved file unchanged until user accepts this proposal.' }; break
             case 'search_project': result = workspace.search(args.query); break
             case 'read_project_skills': result = workspace.paths().filter(path => /(^|\/)(AGENTS\.md|SKILL\.md)$|^\.openstarry\/skills\.md$/i.test(path)).slice(0, 8).map(path => ({ path, content: workspace.content(path).slice(0, 12000) })); break
-            case 'run_project': result = await execute(args.command, runSignal); break
+            case 'run_project': result = await execute(args.command, runSignal, text => {
+              runSignal.throwIfAborted(); output = (output + String(text)).slice(-20000)
+              onEvent({ ...event, phase: 'running', output: toolDetail(output) })
+            }); break
             case 'read_web': case 'search_web': {
               const url = new URL(name === 'read_web' ? args.url : 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(args.query))
               if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw Error('网页地址格式错误')
@@ -84,9 +103,10 @@ export async function runAgent({ messages, settings, workspace, complete, reques
             }
             default: result = await mcp.invoke(name, args); if (result?.isError) throw Error((result.content || []).filter(item => item.type === 'text').map(item => item.text).join('\n') || 'MCP 工具执行失败')
           }
-          failures = 0; onEvent({ ...event, phase: 'complete' })
+          failures = 0; onEvent({ ...event, phase: 'complete', result: toolDetail(result), output: toolDetail(output), duration: Date.now() - started })
         } catch (error) {
-          runSignal.throwIfAborted(); failures++; result = { error: error.message }; onEvent({ ...event, phase: 'error', text: error.message })
+          if (runSignal.aborted) { onEvent({ ...event, phase: 'stopped', text: '运行已停止', output: toolDetail(output), duration: Date.now() - started }); runSignal.throwIfAborted() }
+          failures++; result = { error: error.message }; onEvent({ ...event, phase: 'error', text: toolDetail(error.message), result: toolDetail(result), output: toolDetail(output), duration: Date.now() - started })
           if (failures >= settings.errorLimit) throw Error('连续工具调用失败，已停止：' + error.message)
         }
         context.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result).slice(0, 40000) })
@@ -94,5 +114,6 @@ export async function runAgent({ messages, settings, workspace, complete, reques
       if (!settings.autoContinue) { onEvent({ type: 'text', text: '工具调用已完成；自动续写已关闭。' }); return { content: finalText, turns: turn + 1 } }
     }
     throw Error('已达到工具回合上限，当前修改已保留供审查')
-  } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort) }
+  } catch (error) { runSignal.throwIfAborted(); throw error }
+  finally { clearTimeout(timer); signal?.removeEventListener('abort', abort) }
 }

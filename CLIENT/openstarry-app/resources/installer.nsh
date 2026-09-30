@@ -9,6 +9,7 @@ Var KeepOpenStarryDataState
 UninstPage custom un.OpenStarryDataPage un.OpenStarryDataPageLeave
 
 Function un.OpenStarryDataPage
+  StrCpy $KeepOpenStarryDataState ${BST_CHECKED}
   nsDialogs::Create 1018
   Pop $0
   ${If} $0 == error
@@ -30,7 +31,11 @@ Function un.OpenStarryDataPageLeave
 FunctionEnd
 
 !macro customUnInstall
-  ${If} $KeepOpenStarryDataState != ${BST_CHECKED}
+  ; Updates and silent uninstalls never imply consent to delete the profile.
+  ${IfNot} ${isUpdated}
+  ${AndIfNot} ${Silent}
+  ${AndIf} $KeepOpenStarryDataCheckbox != ""
+  ${AndIf} $KeepOpenStarryDataState == ${BST_UNCHECKED}
     RMDir /r "$LOCALAPPDATA\OpenStarry NextGen"
   ${EndIf}
 !macroend

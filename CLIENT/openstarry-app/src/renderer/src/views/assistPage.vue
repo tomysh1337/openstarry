@@ -12,8 +12,9 @@
       >
         <ChatHistoryPanel
           style="margin-left: 6%;"
-          :histories="historyList"
-          :active-id="store.current_history_id"
+          :histories="displayHistories"
+          :local-action="updateLocalHistory"
+          :active-id="currentHistoryId"
           class="ai-history-panel"
           :class="{ 'is-history-hide': isHistoryHide }"
           @select="handleSelectHistory"
@@ -23,6 +24,8 @@
         />
         <div
           class="chat-wrapper"
+          :class="{ 'web-chat-active': isWebChat }"
+          :style="{ '--home-composer-height': composerHeight + 'px' }"
           @dragover.prevent
           @dragenter="onDragEnter"
           @dragleave="onDragLeave"
@@ -41,12 +44,17 @@
             </div>
           </Transition>
 
+          <div class="chat-service-row">
           <div
+            v-if="!isWebChat"
             class="work-dir-label"
             :class="{no_work_dir: show_work_dir===''}"
+            :title="show_work_dir || '关联项目工作目录'"
             @click="handleConnectProject"
           >
             {{ show_work_dir===''?'未指定工作目录，继续处理文件相关工作时请先关联项目':show_work_dir }}
+          </div>
+          <McpServiceControls :ready="homeState.ready" :project="home.client.project" @changed="checkHomeConnection()" />
           </div>
           <div class="message-list" ref="messageListRef">
             <div
@@ -81,6 +89,7 @@
                 @delete="selectMessageBubble"
                 @quoted="handleQuoteShow"
                 @complete-questions="handleCompleteQuestions"
+                @stream-resize="followHomeStream"
                 @switch-to-branch="handleBranchSwitch"
               />
             </div>
@@ -94,6 +103,7 @@
 
           <div
             class="ctrl-area"
+            ref="composerRef"
             :class="{ empty_messages_list: messages.length === 0 }"
             v-if="!selectMode"
           >
@@ -161,6 +171,11 @@
               </div>
             </Transition>
 
+            <HomeChatSource :source="homeSource" :ready="homeState.ready" :switching="homeNavigating || apiPreparing"
+              :connection="homeConnection" :connecting="homeConnecting" :resume="homeNeedsResume"
+              :busy="homeSession?.busy" :status="homeSession?.statusText" :storage-error="homeSession?.storageError"
+              @change="changeHomeSource" @login="checkHomeConnection(true)" @refresh="checkHomeConnection()"
+              @resume="resumeHomeReply" @stop="stopGenerating" />
             <Transition name="question-presence">
             <QuestionDock v-if="pendingQuestion" :key="pendingQuestion.questions.qid"
               :questions="pendingQuestion.questions.questions" :qid="pendingQuestion.questions.qid"
@@ -184,7 +199,13 @@
                 <svg t="1768828244015" class="icon" :class="{ isFullInput: fullInput }" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="4761" width="200" height="200"><path d="M776.533333 896h-113.066666c-23.466667 0-42.666667-19.2-42.666667-42.666667s19.2-42.666667 42.666667-42.666666h113.066666c19.2 0 34.133333-14.933333 34.133334-34.133334v-113.066666c0-23.466667 19.2-42.666667 42.666666-42.666667s42.666667 19.2 42.666667 42.666667v113.066666c0 66.133333-53.333333 119.466667-119.466667 119.466667z m-416 0h-113.066666C181.333333 896 128 842.666667 128 776.533333v-113.066666c0-23.466667 19.2-42.666667 42.666667-42.666667s42.666667 19.2 42.666666 42.666667v113.066666c0 19.2 14.933333 34.133333 34.133334 34.133334h113.066666c23.466667 0 42.666667 19.2 42.666667 42.666666s-19.2 42.666667-42.666667 42.666667zM853.333333 403.2c-23.466667 0-42.666667-19.2-42.666666-42.666667v-113.066666c0-19.2-14.933333-34.133333-34.133334-34.133334h-113.066666c-23.466667 0-42.666667-19.2-42.666667-42.666666s19.2-42.666667 42.666667-42.666667h113.066666c66.133333 0 119.466667 53.333333 119.466667 119.466667v113.066666c0 23.466667-19.2 42.666667-42.666667 42.666667z m-682.666666 0c-23.466667 0-42.666667-19.2-42.666667-42.666667v-113.066666C128 181.333333 181.333333 128 247.466667 128h113.066666c23.466667 0 42.666667 19.2 42.666667 42.666667s-19.2 42.666667-42.666667 42.666666h-113.066666c-19.2 0-34.133333 14.933333-34.133334 34.133334v113.066666c0 23.466667-19.2 42.666667-42.666666 42.666667z" p-id="4762"></path></svg>
               </el-button>
 
-              <div class="chat-config">
+              <div v-if="isWebChat" class="chat-config web-chat-config">
+                <el-button class="thinking-button" :class="{ yes: homeSession?.thinking }"
+                  :aria-pressed="Boolean(homeSession?.thinking)" :disabled="!homeSession || homeSession.busy"
+                  title="发送前自动设置 ChatGPT 的“思考”选项" @click="toggleHomeThinking">深度思考</el-button>
+                <SafetyLevel />
+              </div>
+              <div v-if="!isWebChat" class="chat-config">
                 <n-select
                   v-model:value="store.config.modelProvider"
                   :options="modelPoviderOptions"
@@ -250,7 +271,7 @@
                 </div>
 
               </div>
-              <el-button class="send-button" type="primary" @click="handleSendMessage">
+              <el-button class="send-button" type="primary" aria-label="发送消息" :disabled="apiPreparing || (isWebChat && (!homeState.ready || isGenerating || homeNeedsResume))" @click="handleSendMessage">
                 <svg t="1776519512558" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="11362" width="26" height="26"><path d="M481.834667 183.168a42.666667 42.666667 0 0 1 60.330666 0l298.666667 298.666667a42.666667 42.666667 0 0 1-60.330667 60.330666L554.666667 316.330667V810.666667a42.666667 42.666667 0 1 1-85.333334 0V316.330667l-225.834666 225.834666a42.666667 42.666667 0 0 1-60.330667-60.330666l298.666667-298.666667z" fill="var(--OpenStarry-primary-text)" p-id="11363"></path></svg>
               </el-button>
             </div>
@@ -292,6 +313,11 @@
 
 <script setup lang="ts">
 import QuestionDock from './component/comp/QuestionDock.vue'
+import HomeChatSource from './component/comp/HomeChatSource.vue'
+import McpServiceControls from './component/comp/McpServiceControls.vue'
+import SafetyLevel from './component/comp/SafetyLevel.vue'
+import { useHomeWebChat } from '../chat/useHomeWebChat.mjs'
+import { isHomeWebId } from '../chat/homeWebChat.mjs'
 import ChatProviderSettings from './component/provider_card/ChatProviderSettings.vue'
 const providerEditor = ref(null)
 import { ref, nextTick, reactive, watch, onMounted, onBeforeUnmount, h, computed, toRaw, onActivated, onDeactivated } from 'vue'
@@ -329,6 +355,54 @@ let unsubscribeWs: null | (() => void) = null
 const cid = ref('')
 const sid = ref('')
 const inputText = ref('')
+const apiPreparing = ref(false)
+const composerRef = ref<HTMLElement | null>(null), composerHeight = ref(180)
+let composerObserver: ResizeObserver | undefined
+let homePageActive = true
+watch(composerRef, element => {
+  composerObserver?.disconnect()
+  if (!element) return
+  composerObserver = new ResizeObserver(() => { composerHeight.value = Math.ceil(element.getBoundingClientRect().height) })
+  composerObserver.observe(element)
+})
+const reportHomeError = error => ElMessage({ type: 'error', message: error?.message || String(error), plain: true })
+async function toggleHomeThinking() {
+  if (!homeSession.value || homeSession.value.busy) return
+  try { await home.client.update(homeSession.value.id, { thinking: !homeSession.value.thinking }) }
+  catch (error) { ElMessage.error(error.message) }
+}
+const home = useHomeWebChat({ api: window.api.ide.gpt, appStore: store, owner: cid, input: inputText,
+  onError: reportHomeError, onNavigate: () => {
+    handleCancel(); isQuoteShow.value = false; quotedText.value = {}; showDropLayer.value = false
+    nextTick(scrollToBottom)
+  } })
+const { source: homeSource, isWeb: isWebChat, currentId: currentHistoryId, state: homeState,
+  session: homeSession, needsResume: homeNeedsResume, connection: homeConnection,
+  connecting: homeConnecting, navigating: homeNavigating, checkConnection: checkHomeConnection } = home
+const displayHistories = computed(() => [
+  ...historyList.value,
+  ...homeState.sessions.filter(session => !session.deleted).map(session => {
+    const date = formatTime(new Date(session.updatedAt).toISOString())
+    return { id: session.id, preview: session.title, time: date.time, date: date.label,
+      createTime: session.createdAt, star: session.star, isGenerating: session.busy, source: 'chatgpt-web' }
+  })
+])
+async function updateLocalHistory(id, values) { await home.client.update(String(id), values) }
+async function changeHomeSource(value) {
+  if (apiPreparing.value) return
+  if (isUploading.value) { ElMessage.info('请等待文件上传完成后切换来源'); return }
+  await home.setSource(value)
+  if (isWebChat.value) await checkHomeConnection()
+}
+async function resumeHomeReply() {
+  try { await home.client.resume(currentHistoryId.value) } catch (error) { reportHomeError(error) }
+}
+async function prepareHomeRetry(text) {
+  try {
+    await home.create(); inputText.value = text
+    ElMessage.info('已在新的网页对话中填入原问题，编辑后发送即可')
+  } catch (error) { reportHomeError(error) }
+}
 
 // ################################
 // Types
@@ -658,6 +732,13 @@ function playJumpHighlight(
 const bottomSentinelRef = ref<HTMLElement | null>(null)
 
 const showScrollToBottom = ref(false)
+async function followHomeStream() {
+  if (!isWebChat.value || showScrollToBottom.value) return
+  await nextTick()
+  const container = messageListRef.value
+  if (container) container.scrollTop = container.scrollHeight
+}
+watch(() => homeSession.value?.turns.at(-1)?.answer.content, followHomeStream)
 
 let bottomObserver: IntersectionObserver | null = null
 
@@ -697,9 +778,9 @@ function ensureHistoryMessages(hid: string): ChatMessage[] {
 }
 
 const messages = computed<ChatMessage[]>(() => {
-  const hid = store.current_history_id
+  const hid = currentHistoryId.value
   if (!hid || hid === '-1') return []
-  return ensureHistoryMessages(hid)
+  return isWebChat.value ? home.messages.value : ensureHistoryMessages(hid)
 })
 
 // ################################
@@ -739,15 +820,15 @@ function ensureAiMessage(list: ChatMessage[], historyId: string, generationId: s
 }
 
 const isGenerating = computed(() => {
-  const hid = store.current_history_id
+  const hid = currentHistoryId.value
   if (!hid || hid === '-1') return false
-  return ensureGeneratingState(hid).isGenerating
+  return isWebChat.value ? Boolean(homeSession.value?.busy) : ensureGeneratingState(hid).isGenerating
 })
 
 const stream_state_text = computed(() => {
-  const hid = store.current_history_id
+  const hid = currentHistoryId.value
   if (!hid || hid === '-1') return ''
-  return ensureGeneratingState(hid).streamStateText
+  return isWebChat.value ? homeSession.value?.statusText || '正在接收网页回复…' : ensureGeneratingState(hid).streamStateText
 })
 
 // ################################
@@ -915,7 +996,7 @@ function parseHistoryMessages(raw: any[], hid: string): ChatMessage[] {
 }
 
 async function loadHistoryMessages(hid: string, force = false) {
-  if (!hid || hid === '-1') return
+  if (!hid || hid === '-1' || isHomeWebId(hid)) return
   if (loadingHistorySet.has(hid)) return
   if (!force && loadedHistorySet.has(hid)) return
 
@@ -939,13 +1020,17 @@ async function loadHistoryMessages(hid: string, force = false) {
 }
 
 const handleSelectHistory = async (id: string | number) => {
+  if (apiPreparing.value) return
   const nextHid = String(id)
-  if (nextHid === store.current_history_id) return
+  if (nextHid === currentHistoryId.value) return
+  if (isUploading.value) { ElMessage.info('请等待文件上传完成后切换对话'); return }
+  home.activate(nextHid)
+  if (isWebChat.value) { displayText.value = ''; return }
   displayText.value = '正在加载'
   isQuoteShow.value = false
   quotedText.value = {}
 
-  store.current_history_id = nextHid
+  currentHistoryId.value = nextHid
   store.currentWorkDir = await store.getWorkDir(nextHid)
 
   ensureHistoryMessages(nextHid)
@@ -957,7 +1042,7 @@ const handleSelectHistory = async (id: string | number) => {
 
   // console.log('hid = ', nextHid, '\n', messages.value)
 
-  const index = historyList.value.findIndex(c => String(c.id) === store.current_history_id)
+  const index = historyList.value.findIndex(c => String(c.id) === currentHistoryId.value)
   if (index !== -1) {
     if (historyList.value[index].hasNewMessage) {
       historyList.value[index].hasNewMessage = false
@@ -984,25 +1069,31 @@ const handleSelectHistory = async (id: string | number) => {
 }
 
 const handleCreateChat = async () => {
+  if (apiPreparing.value) return
+  if (isUploading.value) { ElMessage.info('请等待文件上传完成后新建对话'); return }
+  if (isWebChat.value) {
+    try { await home.create() } catch (error) { reportHomeError(error) }
+    return
+  }
   startTypewriter()
   selectMode.value = false
 
   isQuoteShow.value = false
   quotedText.value = {}
 
-  if (messages.value.length === 0 && store.current_history_id !== '-1') return
+  if (messages.value.length === 0 && currentHistoryId.value !== '-1') return
 
   const newHid = '-1'
 
   ensureHistoryMessages(newHid)
   ensureGeneratingState(newHid)
 
-  store.current_history_id = newHid
+  currentHistoryId.value = newHid
   store.currentWorkDir = await store.getWorkDir(newHid)
 }
 
 const createChat = async () => {
-  if (messages.value.length === 0 && store.current_history_id !== '-1') return
+  if (messages.value.length === 0 && currentHistoryId.value !== '-1') return
 
   const format_date = formatTime(new Date().toLocaleString())
   const res = await window.api.newChat(cid.value, store.currentWorkDir ?? "")
@@ -1023,13 +1114,17 @@ const createChat = async () => {
   }
 
   historyList.value.unshift(chat)
-  store.current_history_id = newHid
-  store.setWorkDir(store.current_history_id, store.currentWorkDir)
+  currentHistoryId.value = newHid
+  store.setWorkDir(currentHistoryId.value, store.currentWorkDir)
   loadedHistorySet.add(newHid)
 }
 
 const handleDeleteHistory = (history_id: string) => {
   const hid = String(history_id)
+  if (isHomeWebId(hid)) {
+    if (hid === currentHistoryId.value) void home.create().catch(reportHomeError)
+    return
+  }
   const index = historyList.value.findIndex(c => String(c.id) === hid)
 
   if (index === -1) {
@@ -1037,8 +1132,8 @@ const handleDeleteHistory = (history_id: string) => {
     return
   }
 
-  if (hid === store.current_history_id) {
-    store.current_history_id = '-1'
+  if (hid === currentHistoryId.value) {
+    currentHistoryId.value = '-1'
     isQuoteShow.value = false
     quotedText.value = {}
   }
@@ -1055,6 +1150,7 @@ const handleDeleteHistory = (history_id: string) => {
 }
 
 const handleEditFinish = async (id: string, newContent: string) => {
+  if (isWebChat.value) { if (newContent.trim()) await prepareHomeRetry(newContent); return }
   // Args: generation id (not node id)
   console.log("Re-edit from node id: ", id)
   if (newContent === '') return
@@ -1070,7 +1166,7 @@ const handleEditFinish = async (id: string, newContent: string) => {
       await window.api.stopGeneration(
         cid.value,
         sid.value,
-        store.current_history_id,
+        currentHistoryId.value,
       )
     } catch (err) {
       console.error('Request failed', err)
@@ -1094,6 +1190,11 @@ const handleEditFinish = async (id: string, newContent: string) => {
 }
 
 const handleRegenerate = async (id: string) => {
+  if (isWebChat.value) {
+    const turn = homeSession.value?.turns.find(turn => turn.id + '-human' === id)
+    if (turn) await prepareHomeRetry(turn.text)
+    return
+  }
   // Args: parent node id (not message id / generation id / node id)
   console.log("Regenerate from node id: ", id)
   const list = messages.value
@@ -1108,7 +1209,7 @@ const handleRegenerate = async (id: string) => {
       await window.api.stopGeneration(
         cid.value,
         sid.value,
-        store.current_history_id,
+        currentHistoryId.value,
       )
     } catch (err) {
       console.error('Request failed', err)
@@ -1363,7 +1464,7 @@ function handleStreamStart(payload: any, historyId: string) {
     list[existingIndex].label = '已准备'
   }
 
-  if (historyId === store.current_history_id) {
+  if (historyId === currentHistoryId.value) {
     nextTick(scrollToBottom)
   }
 }
@@ -1441,7 +1542,7 @@ async function handleStreamEnd(payload: any, historyId: string) {
   const hIndex = historyList.value.findIndex(c => String(c.id) === historyId)
   if (hIndex !== -1) {
     historyList.value[hIndex].isGenerating = false
-    if (store.current_history_id !== historyId) {
+    if (currentHistoryId.value !== historyId) {
       historyList.value[hIndex].hasNewMessage = true
     }
     else {
@@ -1495,7 +1596,7 @@ async function handleStreamAbort(payload: any, historyId: string) {
   const hIndex = historyList.value.findIndex(c => String(c.id) === historyId)
   if (hIndex !== -1) {
     historyList.value[hIndex].isGenerating = false
-    if (store.current_history_id !== historyId) {
+    if (currentHistoryId.value !== historyId) {
       historyList.value[hIndex].hasNewMessage = true
     }
     else {
@@ -1725,6 +1826,7 @@ async function syncHistoryMessages(historyId: string, force = false) {
 }
 
 async function handleSendMessage() {
+  if (isWebChat.value) { await sendMessage(inputText.value); return }
   const list = messages.value
   const last_node = list.at(-1)
   const parent_id = last_node?.node_id
@@ -1739,7 +1841,7 @@ async function handleSendMessage() {
       await window.api.stopGeneration(
         cid.value,
         sid.value,
-        store.current_history_id,
+        currentHistoryId.value,
       )
     } catch (err) {
       console.error('Request failed', err)
@@ -1757,6 +1859,14 @@ async function handleSendMessage() {
 // parent_id: the last confirmed node_id in the current visible message list
 // ################################
 async function sendMessage(content:string = '', parent_id: string = '-', re_generate: boolean = false, pushToList: boolean = true) {
+  if (isWebChat.value) {
+    if (!content.trim()) return
+    const quote = isQuoteShow.value ? quotedText.value.content || '' : ''
+    const sending = home.send(content, quote)
+    if (!inputText.value) handleQuoteClose()
+    await sending
+    return
+  }
   if (!store.config.modelName
     || store.config.modelName === ''
     || !store.config.modelProvider
@@ -1789,9 +1899,14 @@ async function sendMessage(content:string = '', parent_id: string = '-', re_gene
   }
 
   if (!content) return
-  if (store.current_history_id === '-1') await createChat()
+  if (apiPreparing.value) return
+  if (currentHistoryId.value === '-1') {
+    apiPreparing.value = true
+    try { await createChat() } catch (error) { reportHomeError(error); return }
+    finally { apiPreparing.value = false }
+  }
 
-  const currentHid = store.current_history_id
+  const currentHid = currentHistoryId.value
   const list = ensureHistoryMessages(currentHid)
   ensureGeneratingState(currentHid)
   loadedHistorySet.add(currentHid)
@@ -1912,6 +2027,18 @@ const handleCancel = () => {
 }
 
 const handleDeleteMessages = async () => {
+  if (isWebChat.value) {
+    const session = homeSession.value, selected = messages.value.filter(message => message.selected)
+    if (!selected.length) { ElMessage.info('未选择任何消息'); return }
+    try { await ConfirmDialog.confirm('仅隐藏本机选中的消息，ChatGPT 网页中的对话仍会保留。', '隐藏本机消息') } catch { return }
+    for (const message of selected) {
+      const turn = session.turns.find(turn => turn.id === message.id)
+      if (turn) turn.hiddenRoles = [...new Set([...(turn.hiddenRoles || []), message.role])]
+    }
+    handleCancel()
+    try { await home.client.persist(session) } catch (error) { reportHomeError(error) }
+    return
+  }
   const list = messages.value
 
   const del_list = list
@@ -1951,13 +2078,13 @@ const handleDeleteMessages = async () => {
   try {
     const res = await window.api.deleteMsgs(
       cid.value,
-      store.current_history_id,
+      currentHistoryId.value,
       del_list
     )
     if (res.success !== true) throw new Error(res.messages || "Delete messages failed.")
 
     list.splice(0, list.length, ...remain)
-    syncHistoryMessages(store.current_history_id, true)
+    syncHistoryMessages(currentHistoryId.value, true)
   } catch (error) {
     ElMessage({
       type: 'warning',
@@ -1985,7 +2112,7 @@ function handleQuoteClose() {
 }
 
 function handleQuoteShow(hid: string, mid: string, role: string, content: string) {
-  if (hid !== store.current_history_id) return
+  if (hid !== currentHistoryId.value) return
   isQuoteShow.value = true
   console.log("[handleQuoteShow] role:", role, "content:", content)
   quotedText.value = {
@@ -2000,13 +2127,13 @@ async function handleCompleteQuestions(id: string, qid: string, resp: QuestionIt
   const event = {
     client_id: cid.value,
     platform: 'default',
-    history_id: store.current_history_id,
+    history_id: currentHistoryId.value,
     block_id: qid,
     messages: toRaw(resp)
   }
   await sendEvent('resolve_block', event)
 
-  const list = ensureHistoryMessages(store.current_history_id)
+  const list = ensureHistoryMessages(currentHistoryId.value)
   const index = findLatestIndexById(list, id, 'ai')
   if (index !== -1) {
     list[index].questions = undefined
@@ -2014,9 +2141,9 @@ async function handleCompleteQuestions(id: string, qid: string, resp: QuestionIt
 }
 
 async function handleBranchSwitch(branch_id: string) {
-  if (!branch_id) return
+  if (isWebChat.value || !branch_id) return
 
-  const hid = store.current_history_id
+  const hid = currentHistoryId.value
   if (!hid || hid === '-1') return
 
   const list = messages.value
@@ -2075,18 +2202,16 @@ async function handleBranchSwitch(branch_id: string) {
 // Lifecycle
 // ################################
 onActivated(() => {
+  homePageActive = true
   globalDataLock.value = "default"
 })
-
-// onDeactivated(() => {
-//   websocketGateSwitch = false
-// })
+onDeactivated(() => { homePageActive = false })
 
 watch(syncRevision, async () => {
   if (!cid.value) return
   try {
     historyList.value = await get_conversation_list(cid.value)
-    const id = store.current_history_id
+    const id = currentHistoryId.value
     if (id && !generatingState[id]?.isGenerating) await loadHistoryMessages(id, true)
     await fetchModels(store.config.modelProvider, store.config.apiKey)
   } catch (error) { console.warn('Synced chat refresh failed:', error) }
@@ -2108,15 +2233,16 @@ onMounted(async () => {
 
     await authStore.restore()
     cid.value = authStore.user.user_uid
+    try { await home.load() } catch (error) { reportHomeError(error) }
     historyList.value = await get_conversation_list(cid.value)
 
-    if (store.current_history_id && store.current_history_id !== '-1') {
-      ensureHistoryMessages(store.current_history_id)
-      ensureGeneratingState(store.current_history_id)
-      await loadHistoryMessages(store.current_history_id)
+    if (!isWebChat.value && currentHistoryId.value && currentHistoryId.value !== '-1') {
+      ensureHistoryMessages(currentHistoryId.value)
+      ensureGeneratingState(currentHistoryId.value)
+      await loadHistoryMessages(currentHistoryId.value)
     }
-    if (store.current_history_id) {
-      store.currentWorkDir = await store.getWorkDir(store.current_history_id)
+    if (!isWebChat.value && currentHistoryId.value) {
+      store.currentWorkDir = await store.getWorkDir(currentHistoryId.value)
     }
   } catch (err) {
     console.error('Initialization failed', err)
@@ -2135,6 +2261,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  composerObserver?.disconnect()
+  void home.close().catch(reportHomeError)
   window.removeEventListener('keydown', globalHandleKeydown)
   destroyBottomSentinelObserver()
 
@@ -2455,11 +2583,15 @@ function startTypewriter(defaultDisplay: string = '') {
 }
 
 const stopGenerating = async () => {
+  if (isWebChat.value) {
+    try { await home.client.cancel(currentHistoryId.value) } catch (error) { reportHomeError(error) }
+    return
+  }
   try {
     await window.api.stopGeneration(
       cid.value,
       sid.value,
-      store.current_history_id,
+      currentHistoryId.value,
     )
   } catch (err) {
     console.error('Request failed', err)
@@ -2471,6 +2603,7 @@ let dragEnterCounter = 0
 
 function onDragEnter(e: DragEvent) {
   e.preventDefault()
+  if (isWebChat.value) return
   dragEnterCounter++
   showDropLayer.value = true
   console.log('Drag enter, counter:', dragEnterCounter)
@@ -2486,6 +2619,7 @@ function onDragLeave(e: DragEvent) {
 }
 
 async function onDrop(e: DragEvent) {
+  if (isWebChat.value) { e.preventDefault(); ElMessage.info('GPT 网页版当前支持文本对话'); return }
   if (isUploading.value) return
 
   const { webUtils } = require('electron')
@@ -2525,6 +2659,12 @@ async function onDrop(e: DragEvent) {
 }
 
 async function onPaste(e: ClipboardEvent) {
+  if (isWebChat.value) {
+    if (Array.from(e.clipboardData?.items || []).some(item => item.kind === 'file')) {
+      e.preventDefault(); ElMessage.info('GPT 网页版当前支持文本对话')
+    }
+    return
+  }
   if (isUploading.value) return
 
   const { webUtils, clipboard, nativeImage } = require('electron')
@@ -2610,20 +2750,21 @@ async function onPaste(e: ClipboardEvent) {
 }
 
 const handleConnectProject = async () => {
+  if (isWebChat.value) return
   const result = await window.api.openFileDialog("folder")
   if (result.canceled || result.filePaths.length === 0) {
     return
   }
 
-  // console.log('Current history id: ', store.current_history_id)
-  if (store.current_history_id !== '-1') {
-    store.setWorkDir(store.current_history_id, result.filePaths[0])
+  // console.log('Current history id: ', currentHistoryId.value)
+  if (currentHistoryId.value !== '-1') {
+    store.setWorkDir(currentHistoryId.value, result.filePaths[0])
 
     try {
       await window.api.updateConversation(
         cid.value,
         "",
-        store.current_history_id,
+        currentHistoryId.value,
         { workspace: result.filePaths[0] }
       )
     } catch (err) {
@@ -2641,6 +2782,7 @@ const globalHandleKeydown = async (
   }
 ) => {
   // IME composing
+  if (!homePageActive) return
   if (e.isComposing || e.keyCode === 229) {
     return
   }
@@ -2648,10 +2790,10 @@ const globalHandleKeydown = async (
   const target = e.target as HTMLElement | null
 
   // Whether current focus is input area
-  const isInputElement =
+  const isInputElement = Boolean(target?.closest('.chat-input')) && (
     target instanceof HTMLTextAreaElement ||
     target instanceof HTMLInputElement ||
-    target?.isContentEditable
+    target?.isContentEditable)
 
   // Escape
   if (e.key === 'Escape') {
@@ -2677,6 +2819,7 @@ const globalHandleKeydown = async (
     e.stopPropagation()
 
     const text = inputText.value.trim()
+    if (isWebChat.value) { await sendMessage(text); return }
 
     if (!text) {
       return
@@ -2696,7 +2839,7 @@ const globalHandleKeydown = async (
         await window.api.stopGeneration(
           cid.value,
           sid.value,
-          store.current_history_id,
+          currentHistoryId.value,
         )
       } catch (err) {
         console.error('Request failed', err)
@@ -2758,6 +2901,7 @@ watch(
 )
 
 const selectFile = async () => {
+  if (isWebChat.value) return
   if (isUploading.value) return
 
   try {
@@ -2867,7 +3011,7 @@ const setFullInput = () => {
 .ai-page-wrapper {
   display: grid;
   position: relative;
-  grid-template-columns: 20% 80%;
+  grid-template-columns: clamp(180px, 20%, 260px) minmax(0, 1fr);
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -2881,14 +3025,17 @@ const setFullInput = () => {
 .ai-page-wrapper.is-history-hide {
   display: grid;
   position: relative;
-  grid-template-columns: 0% 100%;
+  grid-template-columns: 72px minmax(0, 1fr);
   width: 100%;
   height: 100%;
   overflow: hidden;
   transition: grid-template-columns 0.28s var(--OpenStarry-cubic-bezier);
 }
 
-.ai-history-panel {
+.ai-page-wrapper > .ai-history-panel {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: none;
   background-color: var(--OpenStarry-panel-layer-2-background) !important;
   padding: 0 12px 0 12px !important;
   margin: 0px !important;
@@ -2898,20 +3045,27 @@ const setFullInput = () => {
 }
 
 .ai-history-panel.is-history-hide {
-  width: 40px !important;
-  max-width: 40px;
+  width: 72px !important;
+  max-width: 72px;
   background-color: transparent !important;
   box-shadow: none !important;
 }
 
 .chat-wrapper {
   width: 100%;
+  min-width: 0;
   height: calc(100vh - 36px);
   position: relative;
   background-color: transparent;
   display: flex;
   justify-content: center;
 }
+
+.chat-service-row { position: relative; margin: 10px 16px 0; display: flex; flex-wrap: wrap; flex: 0 0 auto; align-items: center; gap: 12px; z-index: 1001; min-width: 0; }
+.chat-service-row .work-dir-label { position: relative; top: auto; flex: 1 1 0; min-width: 28px; max-width: 100%; width: auto; border-radius: 8px; font-size: 11px; text-overflow: ellipsis; }
+.chat-service-row .work-dir-label.no_work_dir { flex: 0 0 28px; }
+.chat-service-row .work-dir-label.no_work_dir:hover { width: 28px; color: transparent; }
+.chat-service-row .work-dir-label.no_work_dir:hover::before { content: "•••"; }
 
 .drop-layer {
   position: absolute;
@@ -2949,6 +3103,7 @@ const setFullInput = () => {
 
 .work-dir-label {
   width: 800px;
+  max-width: calc(100% - 32px);
   position: absolute;
   align-self: center;
   align-items: center;
@@ -3016,9 +3171,10 @@ const setFullInput = () => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px 100px 88px 100px;
+  padding: 12px 0 32px;
+  width: min(840px, calc(100% - 32px));
   max-width: 840px;
-  min-width: 840px;
+  min-width: 0;
   height: calc(100vh - 190px);
   scrollbar-width: none;
   mask-image: linear-gradient(
@@ -3032,6 +3188,8 @@ const setFullInput = () => {
 
 .message-item {
   position: relative;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: row;
   position: relative;
@@ -3798,6 +3956,25 @@ const setFullInput = () => {
   transform: translateX(-24px) scale(0.8);
 }
 
+.web-chat-config {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  padding-left: 6px;
+  box-sizing: border-box;
+}
+
+.web-chat-config .thinking-button {
+  width: auto;
+  padding: 0 14px;
+  flex-shrink: 0;
+  transform: none;
+}
+
+.web-chat-config .thinking-button:active {
+  transform: scale(0.96);
+}
+
 .select-button:not(.no_error) {
   border: 1px solid transparent;
   background: var(--OpenStarry-danger-button-background);
@@ -3871,4 +4048,11 @@ const setFullInput = () => {
 
 .ctrl-area > .question-dock { width: min(840px, calc(100% - 32px)); z-index: 1000; }
 .input-bar { width: min(840px, calc(100% - 32px)); box-sizing: border-box; }
+.chat-wrapper { flex-direction: column; justify-content: flex-start; }
+.chat-wrapper .message-list { margin: 12px auto calc(var(--home-composer-height, 180px) + 30px); flex: 1; min-height: 0; height: auto; box-sizing: border-box; }
+.message-item :deep(.message-wrapper),
+.message-item :deep(.ai-bubble-wrapper),
+.message-item :deep(.human-message-wrapper),
+.message-item :deep(.branch-switch-wrapper) { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
+.web-chat-active .send-button { grid-column: 2; grid-row: 2; }
 </style>

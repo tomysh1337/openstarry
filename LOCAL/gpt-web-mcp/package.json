@@ -1,0 +1,24 @@
+{
+  "name": "@openstarry/gpt-web-mcp",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node cli.mjs serve",
+    "demo": "node cli.mjs serve --demo",
+    "tunnel": "node tunnel.mjs",
+    "verify:public": "node verify-public.mjs",
+    "demo:chat": "node chat-fixture.mjs",
+    "client": "node cli.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@alibaba-group/opensandbox": "1.1.0",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "playwright-core": "1.63.0",
+    "zod": "3.25.76"
+  }
+}

@@ -1,15 +1,21 @@
 # OpenStarry NextGen
 
+## NextGen 源码渠道
+
+当前开发源码发布到 [`nextgen` 分支](https://github.com/tomysh1337/openstarry/tree/nextgen)。该分支包含桌面首页与 IDE 的 GPT 网页服务、MCP 工具与子任务进度、共享聊天界面及手机端修改。源码推送与正式安装包发布分开；现有 Release 保持原版本。
+
+2026-10-01 发布检查：共享工作台 34 项、桌面逻辑 39 项、MCP 服务 95 项、手机同步 6 项测试通过；桌面与手机 Web 资源构建通过。真实网页账号、外部服务与 Android 真机行为按项目 TODO 中的待验收项继续跟踪。
+
 OpenStarry NextGen 是一款面向 Windows 10、Windows 11 和 Android 的本地 AI 软件。桌面端把聊天、任务、知识库、文件与电脑控制整合在同一个窗口；Android 端可独立新建聊天、选择模型、发送消息，并与电脑互通历史和通用配置。
 
 ## 下载与使用
 
 请从 [GitHub Releases](https://github.com/tomysh1337/openstarry/releases) 下载最新版本：
 
-- `OpenStarry-NextGen-1.3.0-Setup.exe`：Windows 安装版，可选择安装目录。
-- `OpenStarry-NextGen-1.3.0-Portable.exe`：Windows 便携版。
-- `OpenStarry-Mobile-1.3.0.apk`：正式签名 Android 安装包，支持 Android 6.0 及以上。
-- `OpenStarry-Mobile-1.3.0-Compat.apk`：使用旧版调试签名，供已安装 1.1.x 的用户保留应用数据直接升级。两个签名系列分别升级，请按已安装版本选择。
+- `OpenStarry-NextGen-1.3.1-Setup.exe`：Windows 安装版，可选择安装目录。
+- `OpenStarry-NextGen-1.3.1-Portable.exe`：Windows 便携版。
+- `OpenStarry-Mobile-1.3.1.apk`：正式签名 Android 安装包，支持 Android 6.0 及以上。
+- `OpenStarry-Mobile-1.3.1-Compat.apk`：使用旧版调试签名，供已安装 1.1.x 的用户保留应用数据直接升级。两个签名系列分别升级，请按已安装版本选择。
 
 也可以直接打开 [OpenStarry 移动网页版](https://openstarry.154-219-110-177.sslip.io)。手机可先添加供应商、在本机填写 API 密钥后聊天；连接同步服务后，会话与配置会与电脑互通。记录保存在设备本地，断开同步仍然保留。
 
@@ -39,6 +45,12 @@ OpenStarry NextGen 是一款面向 Windows 10、Windows 11 和 Android 的本地
 
 手机可本地运行 JavaScript 和预览网页；Python、Java、Node 项目可连接执行服务器。设置中可独立开启项目文件、执行、网页、知识检索、技能与 MCP 调用。使用说明见 [IDE 工作区](IDE/README.md)，MCP 部署与配置见 [MCP 说明](IDE/MCP.md)。IDE 项目和专属对话保存在本机，项目可用 ZIP 交换；普通聊天与通用配置继续跨设备同步。
 
+## GPT 网页版（本地开发预览）
+
+桌面首页普通对话和 IDE Agent 均已加入 API / GPT 网页版来源、连接登录、停止与恢复回复。首页沿用原历史列表和消息气泡，网页历史与草稿暂存本机，当前支持文本对话；模型与思考设置在网页选择。网页使用可见 Edge 独立配置目录正常登录；回复经本地 MCP 事件和 SSE 回到应用。IDE 文件工具需配置 ChatGPT 的 guess 连接器，修改仍先待本机审查。首页使用仅提问模式，不创建文件任务。
+
+当前代码、fixture 测试、构建和独立预览包已准备，实时 ChatGPT 页面及 Electron 界面尚待验收；本地 1.3.1 开发产物未因此发布。当前状态见 [TODO](TODO.md) 和 [HANDOFF](HANDOFF.md)，协议/运行说明见 [本地 MCP](LOCAL/gpt-web-mcp/README.md)。
+
 ## 开启聊天同步
 
 在 Windows 客户端打开“设置 → 手机与跨设备同步”，填写：
@@ -65,10 +77,12 @@ Windows 数据默认保存在：
 
 ## 从源码运行
 
-Windows 桌面端需要 Node.js 22 和项目内置的 `uv.exe`：
+Windows 桌面端及新增 GPT 网页 helper 使用 Node.js 24 或更新版本和项目内置的 `uv.exe`；网页操作使用已安装的 Microsoft Edge。
 
 ```powershell
-cd SHARED\workbench
+cd LOCAL\gpt-web-mcp
+npm.cmd ci --ignore-scripts
+cd ..\..\SHARED\workbench
 npm.cmd ci
 cd ..\..\CLIENT\openstarry-app
 npm.cmd ci

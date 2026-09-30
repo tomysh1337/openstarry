@@ -4,6 +4,10 @@ directories:
   buildResources: resources
 icon: resources/OpenStarry.ico
 files:
+  - 'out/**'
+  - 'package.json'
+  - '!{dist,tmp,tests}/**'
+  - '!**/*.log'
   - '!**/.vscode/*'
   - '!src/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
@@ -17,6 +21,27 @@ asarUnpack:
   - node_modules/@oai/cua/bin/**
   - node_modules/@oai/sky/bin/**
 extraResources:
+  - from: vendor/runtime-tools/node.exe
+    to: runtime/node.exe
+  - from: vendor/runtime-tools/cloudflared.exe
+    to: runtime/cloudflared.exe
+  - from: ../../LOCAL/gpt-web-mcp
+    to: gpt-web-mcp
+    filter:
+      - '*.mjs'
+      - 'package.json'
+      - 'edge-extension/**'
+      - 'opensandbox-setup.ps1'
+      - 'install-opensandbox.cmd'
+      - 'start-opensandbox.cmd'
+      - '!chat-fixture.mjs'
+      - '!cli.mjs'
+      - '!verify-public.mjs'
+      - 'node_modules/**'
+      - '!node_modules/**/test/**'
+      - '!node_modules/**/tests/**'
+      - '!**/.state/**'
+      - '!**/*.log'
   - from: resources/OpenStarry.png
     to: branding/OpenStarry.png
   - from: vendor/runtime-tools/uv.exe

@@ -4,7 +4,7 @@
 
 手机提供 IDE 项目工具、MCP 与独立执行服务器连接，不包含桌面电脑控制和任意桌面文件访问。聊天记录与通用配置双向同步，API 密钥仅保存在当前设备。
 
-## 1.3.0 界面
+## 1.3.1 界面
 
 与电脑端统一青绿色、浅灰背景、供应商卡片和圆角聊天栏，首次使用默认浅色；已有外观偏好继续生效。手机底部提供聊天、IDE、供应商、设置四个入口，平板宽屏可同时显示聊天历史。
 
@@ -49,9 +49,9 @@ cd android
 
 ```powershell
 $env:OPENSTARRY_ANDROID_KEYSTORE='C:\path\OpenStarry-Android-Release.jks'
-$env:OPENSTARRY_ANDROID_STORE_PASSWORD='STORE_PASSWORD'
+$env:OPENSTARRY_ANDROID_STORE_PASSWORD='<keystore-password>'
 $env:OPENSTARRY_ANDROID_KEY_ALIAS='openstarry'
-$env:OPENSTARRY_ANDROID_KEY_PASSWORD='KEY_PASSWORD'
+$env:OPENSTARRY_ANDROID_KEY_PASSWORD='<key-password>'
 .\gradlew.bat assembleRelease
 ```
 

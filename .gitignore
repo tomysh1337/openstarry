@@ -70,6 +70,8 @@ logs/
 # Temporary duplicate copied while preparing the computer-use runtime. The
 # packaged copies live under the vendored @oai packages instead.
 CLIENT/openstarry-app/vendor/computer-use/runtime/
+CLIENT/openstarry-app/vendor/runtime-tools/node.exe
+CLIENT/openstarry-app/vendor/runtime-tools/cloudflared.exe
 cache/
 tmp/
 temp/

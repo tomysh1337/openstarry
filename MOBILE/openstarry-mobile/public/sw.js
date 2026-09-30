@@ -1,4 +1,4 @@
-const CACHE = 'openstarry-mobile-v1.3.0'
+const CACHE = 'openstarry-mobile-v1.3.1'
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(async cache => {
     const response = await fetch('/index.html', { cache: 'reload' })

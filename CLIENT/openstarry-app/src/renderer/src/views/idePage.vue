@@ -11,6 +11,7 @@ import HomePage from './homePage.vue'
 import { useAppCacheData } from '../store/app'
 import { useAuthStore } from '../store/auth'
 import { mountWorkbench } from '@openstarry/workbench'
+import { watchGptTask } from '../chat/gptClient.mjs'
 import '@openstarry/workbench/style.css'
 const store = useAppCacheData(), auth = useAuthStore(), host = ref(null)
 let workbench
@@ -36,12 +37,22 @@ async function getModels() {
   if (current.model && !models.includes(current.model)) models.unshift(current.model)
   return models.map(value => ({ value, label: value, selected: value === current.model }))
 }
-async function request({ signal, ...value }) {
+async function request({ signal, onChunk, ...value }) {
   signal?.throwIfAborted(); const id = crypto.randomUUID()
-  const abort = () => window.api.ide.cancelHttp({ id })
+  let chunkError
+  const abort = () => window.api.ide.cancelHttp({ id }).catch(() => {})
+  const unsubscribe = onChunk ? window.api.ide.onHttpChunk(event => {
+    if (event.id !== id || signal?.aborted || chunkError) return
+    try { onChunk(event.text) } catch (error) { chunkError = error; abort() }
+  }) : () => {}
   signal?.addEventListener('abort', abort, { once: true })
-  try { const result = await window.api.ide.http({ id, ...value }); signal?.throwIfAborted(); return result }
-  finally { signal?.removeEventListener('abort', abort) }
+  try { const result = await window.api.ide.http({ id, ...value, stream: Boolean(onChunk) }); if (chunkError) throw chunkError; signal?.throwIfAborted(); return result }
+  catch (error) { throw chunkError || (signal?.aborted ? signal.reason : error) }
+  finally { unsubscribe(); signal?.removeEventListener('abort', abort) }
+}
+const web = {
+  ...window.api.ide.gpt,
+  watch: value => watchGptTask(window.api.ide.gpt, value)
 }
 async function run({ signal, onOutput, ...value }) {
   signal?.throwIfAborted(); const requestId = crypto.randomUUID()
@@ -108,7 +119,7 @@ async function configureProvider({ parent } = {}) {
 onMounted(async () => {
   try {
     workbench = await mountWorkbench(host.value, { theme: store.config.dark_theme ? 'dark' : 'light', getModel, getModels, selectModel: value => store.saveAppConfig('modelName', value), request,
-      configureProvider,
+      configureProvider, web,
       notify: message => ElMessage({ message, duration: 5000 }),
       notifyQuestion: question => window.api.system.notifyQuestion({ id: crypto.randomUUID(), question, title: 'IDE Agent 需要你的回答' }),
       native: { open: () => window.api.ide.open(), write: value => window.api.ide.write(value), rename: value => window.api.ide.rename(value), remove: value => window.api.ide.remove(value), run },

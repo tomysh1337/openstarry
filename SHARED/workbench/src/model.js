@@ -36,12 +36,59 @@ export class Workspace {
     this.active = this.tabs.includes(data.active) ? data.active : this.tabs[0] || ''
     this.chat = data.chat || []
     this.chatSessions = data.chatSessions || []
+    this.chatDraft = data.chatDraft || ''
+    this.chatReferences = data.chatReferences || []
+    this.chatId = data.chatId || globalThis.crypto.randomUUID()
+    this.chatCreated = data.chatCreated || Date.now()
+    this.chatMode = data.chatMode === 'ask' ? 'ask' : 'agent'
+    this.chatSource = data.chatSource === 'gpt-web' ? 'gpt-web' : 'api'
+    this.chatThinking = data.chatThinking === true
+    const chatIds = new Set([this.chatId])
+    this.chatSessions = this.chatSessions.map(session => {
+      const id = session.id && !chatIds.has(session.id) ? session.id : globalThis.crypto.randomUUID()
+      chatIds.add(id); return { ...session, id }
+    })
+    this.chatTabs = [...new Set((data.chatTabs || [this.chatId]).filter(id => chatIds.has(id)))]
+    if (!this.chatTabs.includes(this.chatId)) this.chatTabs.push(this.chatId)
     this.nativeRoot = data.nativeRoot || ''
     this.diskFiles = { ...(data.diskFiles || {}) }
     this.command = data.command || ''
   }
   paths() { return [...new Set([...Object.keys(this.files), ...Object.keys(this.proposals)])].sort() }
-  content(path) { return this.drafts[path] ?? this.files[path] ?? '' }
+  currentChat() { return { id: this.chatId, created: this.chatCreated, chat: this.chat, draft: this.chatDraft, references: this.chatReferences, mode: this.chatMode, source: this.chatSource, thinking: this.chatThinking } }
+  conversation(id) { return id === this.chatId ? this.currentChat() : this.chatSessions.find(session => session.id === id) }
+  chatTitle(id) {
+    const session = this.conversation(id)
+    return session?.chat?.find(item => item.role === 'user')?.content?.trim().slice(0, 60) || session?.title || session?.draft?.trim().slice(0, 60) || '新对话'
+  }
+  activateChat(id) {
+    if (id !== this.chatId) {
+      const session = this.conversation(id)
+      if (!session) throw Error('对话已不存在')
+      this.chatSessions = [this.currentChat(), ...this.chatSessions.filter(item => item.id !== id)]
+      this.chatId = session.id; this.chatCreated = session.created || Date.now(); this.chat = session.chat || []
+      this.chatDraft = session.draft || ''; this.chatReferences = session.references || []; this.chatMode = session.mode === 'ask' ? 'ask' : 'agent'
+      this.chatSource = session.source === 'gpt-web' ? 'gpt-web' : 'api'
+      this.chatThinking = session.thinking === true
+    }
+    if (!this.chatTabs.includes(id)) this.chatTabs.push(id)
+  }
+  createChat() {
+    const id = globalThis.crypto.randomUUID()
+    this.chatSessions.push({ id, created: Date.now(), chat: [], draft: '', references: [], source: this.chatSource, thinking: this.chatThinking })
+    this.activateChat(id); return id
+  }
+  closeChat(id) {
+    const index = this.chatTabs.indexOf(id)
+    if (index < 0) return
+    const remaining = this.chatTabs.filter(value => value !== id)
+    if (this.chatId === id) {
+      if (remaining.length) this.activateChat(remaining[Math.min(index, remaining.length - 1)])
+      else remaining.push(this.createChat())
+    }
+    this.chatTabs = remaining
+  }
+  content(path) { return this.drafts[path] ?? this.files[path] ?? (this.proposals[path]?.external ? this.proposals[path].base : '') ?? '' }
   open(path) { if (!this.paths().includes(path)) throw Error('文件已不存在'); if (!this.tabs.includes(path)) this.tabs.push(path); this.active = path }
   edit(path, content) { projectPath(path); if (new TextEncoder().encode(content).length > MAX_FILE_BYTES) throw Error('文件超过 1 MB'); if (content === this.files[path]) delete this.drafts[path]; else this.drafts[path] = content }
   create(path, content = '') { path = projectPath(path); if (this.paths().includes(path)) throw Error('文件已存在'); validateFiles({ ...this.files, [path]: content }); this.files[path] = content; this.open(path) }
@@ -50,13 +97,18 @@ export class Workspace {
     path = projectPath(path); validateFiles({ ...this.files, [path]: content })
     this.proposals[path] = { base, content, created: Date.now() }; this.open(path)
   }
+  proposeExternal(path, content, base, proposalId) {
+    if (typeof path !== 'string' || path.length > 1024 || !/^(?:[a-z]:\/|\/)/i.test(path) || /[\x00-\x1f]/.test(path) || path.split('/').some(part => part === '..') || !/^[a-f0-9-]{36}$/.test(proposalId)) throw Error('全盘修改提议格式错误')
+    for (const text of [base, content]) if (typeof text !== 'string' || text.includes('\0') || new TextEncoder().encode(text).length > MAX_FILE_BYTES) throw Error('全盘修改仅支持文本文件')
+    this.proposals[path] = { base, content, created: Date.now(), external: true, webProposalId: proposalId }; this.open(path)
+  }
   checkProposal(path) {
     const proposal = this.proposals[path]
     if (!proposal) throw Error('没有待审查修改')
     if (this.content(path) !== proposal.base) throw Error('文件在提案后发生变化，请撤销提案后重新生成，避免覆盖你的编辑')
     return proposal
   }
-  accept(path) { const proposal = this.checkProposal(path); this.files[path] = proposal.content; delete this.drafts[path]; delete this.proposals[path] }
+  accept(path) { const proposal = this.checkProposal(path); if (proposal.external) { this.reject(path); return }; this.files[path] = proposal.content; delete this.drafts[path]; delete this.proposals[path] }
   reject(path) { delete this.proposals[path]; if (!(path in this.files)) this.close(path) }
   close(path) { this.tabs = this.tabs.filter(item => item !== path); if (this.active === path) this.active = this.tabs.at(-1) || '' }
   rename(path, next) {

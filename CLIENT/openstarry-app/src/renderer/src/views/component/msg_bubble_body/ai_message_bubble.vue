@@ -50,9 +50,20 @@
         <div style="height: 2px; width: 100%; background: linear-gradient(to left, transparent, var(--OpenStarry-default-light-color));"></div>
       </div>
 
+      <div v-if="msg.extra?.gptWeb" class="web-reply-state">
+        <span>GPT 网页版<span v-if="msg.extra.gptWeb.source === 'fixture'"> · fixture</span> · {{ webStatus }}</span>
+        <p v-for="(notice, index) in msg.extra.gptWeb.notices" :key="index" role="status">{{ notice }}</p>
+      </div>
+      <WebToolCalls v-if="msg.extra?.gptWeb?.tools?.length" :tools="msg.extra.gptWeb.tools" />
+      <div v-if="msg.extra?.gptWeb?.artifacts?.length" class="web-files">
+        <button v-for="file in msg.extra.gptWeb.artifacts" :key="file.messageId + file.path"
+          type="button" :disabled="downloading" @click.stop="downloadWebFile(file.path)">下载 {{ file.name }}</button>
+      </div>
+      <p v-if="downloadNotice" class="web-download-status" role="status">{{ downloadNotice }}</p>
       <!-- Unified chunks -->
       <div
         class="ai-bubble"
+        @click="onWebLinkClick"
         @mousedown="handleMouseDown"
         @mouseup="handleMouseUp"
       >
@@ -224,11 +235,11 @@
           <div class="tag-name">供应商:</div>
           <div>{{ msg.info?.model_provider }}</div>
         </div>
-        <div class="tag-wrapper">
+        <div v-if="!msg.extra?.gptWeb" class="tag-wrapper">
           <div class="tag-name">已使用模型:</div>
           <div>{{ msg.info?.model }}</div>
         </div>
-        <div class="tag-wrapper" title="Token统计仅供参考，实际用量请以控制台为准！">
+        <div v-if="!msg.extra?.gptWeb" class="tag-wrapper" title="Token统计仅供参考，实际用量请以控制台为准！">
           <div class="tag-name">令牌数:</div>
           <div>{{ msg.info?.total_tokens ?? 'N/A' }}</div>
         </div>
@@ -255,6 +266,7 @@
           v-if="isShowMenu"
           ref="menuRef"
           type="ai"
+          :regenerate-label="msg.extra?.gptWeb ? '在新网页对话中重新提问' : '重新生成'"
           :style="menuStyle"
           @close-menu="closePopMenu"
           @copy-value="copyContextValue"
@@ -284,8 +296,10 @@ import { nextTick, ref, shallowRef, onMounted, onBeforeUnmount, computed, watch 
 import msgBubbleMenu from './comp/msgBubbleMenu.vue'
 import msgSelectionBubble from './comp/msgSelectionBubble.vue'
 import ToolLabelCard from './comp/toolLabelCard.vue'
+import WebToolCalls from './comp/WebToolCalls.vue'
 import QuestionView from './comp/questionView.vue'
 import MarkdownIt from 'markdown-it'
+import { createTextReveal } from '@openstarry/workbench/textReveal'
 import 'github-markdown-css/github-markdown.css'
 import hljs from 'highlight.js'
 import { ConfirmDialog } from '../comp/confirmDialog.js'
@@ -294,6 +308,7 @@ import { useAppCacheData } from '../../../store/app'
 import { globalSelection } from '../../../store/globalData.js'
 
 const emit = defineEmits<{
+  streamResize: []
   reGenerate: [id: string]
   selectText: [id: string, role: string]
   selected: [id: string]
@@ -304,6 +319,7 @@ const emit = defineEmits<{
 }>()
 
 const store = useAppCacheData()
+const webStatus = computed(() => ({ complete: '已完成', stopped: '已停止', error: '回复出错', interrupted: '等待恢复' })[props.msg.extra?.gptWeb?.status] || props.msg.label || '等待网页回复')
 
 interface ToolLabel {
   tool_call_id: string
@@ -430,6 +446,28 @@ const md = new MarkdownIt({
   },
 })
 
+const downloading = ref(false), downloadNotice = ref('')
+async function downloadWebFile(path: string) {
+  if (downloading.value) return
+  const web = props.msg.extra?.gptWeb
+  if (!web?.project || !web.taskId) {
+    downloadNotice.value = '这个文件链接属于生成它的 ChatGPT 会话，请在该原网页下载。'
+    return
+  }
+  downloading.value = true; downloadNotice.value = '正在请求普通 Edge 下载…'
+  try {
+    const result = await window.api.ide.gpt.download({ project: web.project, taskId: web.taskId, path })
+    downloadNotice.value = result.message
+  } catch (error) { downloadNotice.value = error instanceof Error ? error.message : String(error) }
+  finally { downloading.value = false }
+}
+function onWebLinkClick(event: MouseEvent) {
+  const link = (event.target as Element)?.closest('a')
+  const href = link?.getAttribute('href') || ''
+  if (!href.startsWith('sandbox:')) return
+  event.preventDefault(); event.stopPropagation()
+  void downloadWebFile(href)
+}
 const expandedThinkMap = ref<Record<string, boolean>>({})
 
 function toggleThinkItem(key: string) {
@@ -535,8 +573,21 @@ function buildRenderItems(chunks: MessageChunk[] = []): RenderItem[] {
   })
 }
 
+const revealedWebText = ref('')
+const webReveal = createTextReveal({ onText: value => { revealedWebText.value = value } })
+watch(
+  () => [props.msg.node_id, props.msg.extra?.gptWeb, props.msg.pending, props.msg.chunks.filter(isMessageLabel).map(chunk => chunk.content).join('')] as const,
+  (value, previous) => {
+    const [identity, , , text] = value
+    webReveal.update(text, { streaming: false, reset: Boolean(previous && previous[0] !== identity) })
+  },
+  { immediate: true, flush: 'sync' }
+)
+watch(revealedWebText, () => { if (props.msg.extra?.gptWeb && props.msg.pending) emit('streamResize') }, { flush: 'post' })
 const renderItems = computed(() => {
-  return buildRenderItems(props.msg.chunks ?? [])
+  return buildRenderItems(props.msg.extra?.gptWeb
+    ? [{ label_type: 'content', content: revealedWebText.value }]
+    : props.msg.chunks ?? [])
 })
 
 function toggleSelectFullArea() {
@@ -937,6 +988,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  webReveal.close()
   document.removeEventListener('click', onCodeCopyClick)
   document.removeEventListener('selectionchange', handleSelectionChange)
   window.removeEventListener('resize', onResize)
@@ -946,6 +998,12 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.web-reply-state { font-size: 12px; line-height: 1.5; color: var(--OpenStarry-secondary-dark-color); padding: 6px 0; overflow-wrap: anywhere; }
+.web-reply-state p { margin: 4px 0; }
+.web-files { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.web-files button { cursor: pointer; color: var(--OpenStarry-primary-color); background: var(--OpenStarry-panel-layer-3-background); border: 1px solid var(--OpenStarry-default-light-color); border-radius: 8px; padding: 7px 12px; }
+.web-files button:disabled { opacity: .6; cursor: wait; }
+.web-download-status { font-size: 12px; overflow-wrap: anywhere; }
 /* ==================== 公共变量 ==================== */
 .message-wrapper {
   --msg-transition: background 0.6s var(--OpenStarry-cubic-bezier);

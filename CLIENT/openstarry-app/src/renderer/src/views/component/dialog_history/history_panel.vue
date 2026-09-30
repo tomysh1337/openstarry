@@ -80,6 +80,8 @@
                 >
                   <HistoryCard 
                     :history="h" 
+                    :active="String(h.id) === activeHistoryId"
+                    :local-action="localAction"
                     @rename-history="handleRenameHistory"
                     @delete-history="handleDeleteHistory"
                   />
@@ -109,6 +111,7 @@ import { useAuthStore } from '../../../store/auth.js'
 const props = defineProps<{
   histories?: ChatHistory[]
   activeId?: number | string
+  localAction?: (id: string, values: Record<string, unknown>) => Promise<void>
 }>()
 
 const emit = defineEmits<{
@@ -429,14 +432,17 @@ const switchFold = async (date: string) => {
 const createNewChat = () => emit('create')
 
 // rename / delete
+async function updateHistory(historyId: string, values: Record<string, unknown>) {
+  const history = props.histories?.find(item => String(item.id) === historyId)
+  if (history?.source === 'chatgpt-web') {
+    if (!props.localAction) throw Error('本机历史尚未加载')
+    return props.localAction(historyId, values)
+  }
+  return window.api.updateConversation(cid.value, '', historyId, values)
+}
 const handleRenameHistory = async (history_id: string, new_title: string) => {
   try {
-    await window.api.updateConversation(
-      cid.value,
-      "",
-      history_id,
-      { title: new_title }
-    )
+    await updateHistory(history_id, { title: new_title })
     ElMessage({ type: 'success', message: '已更新', plain: true })
   } catch (err) {
     console.error("[handleRenameHistory error]:" + err)
@@ -466,17 +472,12 @@ const handleDeleteHistory = async (history_id: string) => {
   }
 
   try {
-    await window.api.updateConversation(
-      cid.value,
-      "",
-      history_id,
-      { deleted: true }
-    )
+    await updateHistory(history_id, { deleted: true })
     ElMessage({ type: 'success', message: '已删除', plain: true })
     emit('delete', history_id)
   } catch (err) {
     console.error("[handleDeleteHistory error]:" + err)
-    ElMessage({ type: 'error', message: '删除失败', plain: true })
+    ElMessage({ type: 'error', message: err?.message || '删除失败', plain: true })
   }
 }
 

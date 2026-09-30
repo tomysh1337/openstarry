@@ -1,23 +1,7 @@
 import { serviceUrl } from './settings.js'
 import runtimeDocument from '../public/ide-runtime.html?raw'
-export async function httpRequest({ url, method = 'GET', headers = {}, body, signal }) {
-  const response = await fetch(url, { method, headers, body, signal })
-  const text = await response.text()
-  if (text.length > 4 * 1024 * 1024) throw Error('响应超过大小上限')
-  return { status: response.status, text, headers: Object.fromEntries(response.headers) }
-}
-export async function openAIComplete({ request = httpRequest, endpoint, key, model, messages, tools = [], signal, temperature = 1 }) {
-  if (!endpoint || !model) throw Error('请先在供应商设置中选择模型')
-  const url = new URL(endpoint.replace(/\/(chat\/completions|models)\/?$/, '').replace(/\/+$/, '') + '/chat/completions')
-  if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw Error('供应商接口地址格式错误')
-  const response = await request({ url: url.href, method: 'POST', headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: 'Bearer ' + key } : {}) }, body: JSON.stringify({ model, messages, temperature, stream: false, ...(tools.length ? { tools, tool_choice: 'auto' } : {}) }), signal })
-  if (response.status >= 400) throw Error('模型请求失败：HTTP ' + response.status)
-  let data; try { data = JSON.parse(response.text) } catch { throw Error('模型响应不是 JSON') }
-  if (data.error) throw Error('模型返回错误，请检查模型和账户额度')
-  const message = data.choices?.[0]?.message
-  if (!message || (!message.content && !message.tool_calls?.length)) throw Error('模型返回空内容')
-  return message
-}
+import { httpRequest } from './completion.js'
+export { httpRequest, openAIComplete } from './completion.js'
 const encodeScript = value => JSON.stringify(value).replaceAll('<', '\\u003c')
 export const runtimeFrameUrl = new URL('../public/ide-runtime.html', import.meta.url).href
 function loadRuntimeFrame(frame, payload, onReady, onError) {

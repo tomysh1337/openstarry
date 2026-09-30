@@ -2,7 +2,7 @@
   <div class="popup-menu-wrapper" ref="wrapperRef">
     <div class="popup-content" :style="popupStyle">
       <button @click="rename" class="menu-item">重新命名</button>
-      <button @click="connectProject" class="menu-item">工作目录</button>
+      <button v-if="!hideWorkspace" @click="connectProject" class="menu-item">工作目录</button>
       <button @click="deleteRecord" class="menu-item danger-item">删除记录</button>
     </div>
   </div>
@@ -13,6 +13,7 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 const props = defineProps<{
   type: string
+  hideWorkspace?: boolean
 }>()
 
 

@@ -1,13 +1,32 @@
-import { Capacitor, CapacitorHttp } from '@capacitor/core'
+import { Capacitor, CapacitorHttp, registerPlugin } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { httpRequest, openAIComplete } from '@openstarry/workbench/runtime'
 import { runAgent } from '@openstarry/workbench/agent'
 import { loadToolSettings } from '@openstarry/workbench/settings'
 import { getWorkspace, saveWorkspace, executeProject, askQuestion } from '@openstarry/workbench'
-export async function mobileRequest({ signal, body, ...args }) {
+const agentHttp = registerPlugin('AgentHttp')
+export async function mobileRequest({ signal, body, onChunk, ...args }) {
   signal?.throwIfAborted()
-  if (!Capacitor.isNativePlatform()) return httpRequest({ ...args, body, signal })
+  if (!Capacitor.isNativePlatform()) return httpRequest({ ...args, body, signal, onChunk })
+  if (onChunk) {
+    const id = crypto.randomUUID()
+    let chunkError
+    const abort = () => agentHttp.cancel({ id }).catch(() => {})
+    const listener = await agentHttp.addListener('chunk', event => {
+      if (event.id !== id || signal?.aborted || chunkError) return
+      try { onChunk(event.text) } catch (error) { chunkError = error; abort() }
+    })
+    try {
+      signal?.throwIfAborted()
+      signal?.addEventListener('abort', abort, { once: true })
+      const result = await agentHttp.request({ id, body, ...args })
+      if (chunkError) throw chunkError
+      signal?.throwIfAborted()
+      return result
+    } catch (error) { throw chunkError || (signal?.aborted ? signal.reason : error) }
+    finally { signal?.removeEventListener('abort', abort); await listener.remove() }
+  }
   const pending = CapacitorHttp.request({ ...args, data: body ? JSON.parse(body) : undefined, responseType: 'text', connectTimeout: 20000, readTimeout: 180000 })
   const response = await new Promise((resolve, reject) => {
     const abort = () => reject(signal.reason || Error('请求已停止'))
@@ -23,10 +42,10 @@ export async function mobileAgent({ provider, key, model, messages, temperature,
   const workspace = await getWorkspace(), settings = loadToolSettings(); let content = ''
   await runAgent({ settings, workspace, messages: [{ role: 'system', content: 'You are OpenStarry Agent. Tools work on the current IDE project. File edits are proposals and require user review in IDE, not saved changes.' }, ...messages], signal, request: mobileRequest,
     complete: args => openAIComplete({ ...args, endpoint: provider.endpoint, key, model, temperature, request: mobileRequest }),
-    execute: (command, signal) => executeProject(workspace, command, { settings, request: mobileRequest, signal }),
+    execute: (command, signal, onOutput) => executeProject(workspace, command, { settings, request: mobileRequest, signal, onOutput }),
     ask: async (question, signal) => await askQuestion(question, signal) || '用户取消，请暂停任务。',
     onProposal: () => saveWorkspace(workspace),
-    onEvent: event => { if (event.type === 'text') content += (content ? '\n\n' : '') + event.text; onDelta?.({ content, think: event.type === 'tool' && settings.showTools ? `${event.name} · ${event.phase}` : '' }) }
+    onEvent: event => { if (event.type === 'text') content += (!event.delta && content ? '\n\n' : '') + event.text; onDelta?.({ content, think: event.type === 'tool' && settings.showTools ? `${event.name} · ${event.phase}` : '' }) }
   })
   return { content, think: '' }
 }

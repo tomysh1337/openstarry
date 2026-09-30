@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OpenStarry Bridge</title><link rel="stylesheet" href="popup.css"></head>
+<body>
+  <h1>OpenStarry Bridge</h1>
+  <p>使用这个 Edge 中的 ChatGPT 登录。先在 OpenStarry 点击「连接 Edge / 复制配对码」。</p>
+  <label for="pairing">粘贴本机配对码</label>
+  <textarea id="pairing" rows="3" spellcheck="false" autocomplete="off" placeholder="osb1.…"></textarea>
+  <button id="connect">连接并打开 ChatGPT</button>
+  <p id="status" role="status">正在读取连接状态…</p>
+  <button id="disconnect" class="secondary">断开连接</button>
+  <small>只响应你在应用中提交的聊天任务。扩展保留 ChatGPT 标签页，不读取 Cookie，不处理验证挑战。</small>
+  <script type="module" src="popup.mjs"></script>
+</body>
+</html>

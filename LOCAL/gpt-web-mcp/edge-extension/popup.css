@@ -1,0 +1,12 @@
+:root { color-scheme: light dark; font: 13px/1.5 system-ui, sans-serif; }
+body { width: 330px; padding: 16px; margin: 0; }
+h1 { font-size: 18px; margin: 0 0 8px; }
+p { margin: 10px 0; }
+label { display: block; font-weight: 600; margin: 16px 0 6px; }
+textarea { box-sizing: border-box; width: 100%; padding: 9px; border: 1px solid #8888; border-radius: 6px; font: 12px/1.4 monospace; resize: vertical; }
+button { width: 100%; margin-top: 10px; padding: 9px; border: 0; border-radius: 6px; background: #3268c5; color: white; cursor: pointer; font: inherit; }
+button:disabled { opacity: .6; cursor: wait; }
+button.secondary { background: transparent; color: inherit; border: 1px solid #8888; }
+small { display: block; opacity: .75; margin-top: 14px; }
+#status { min-height: 2em; overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid #729cff; outline-offset: 2px; }
