@@ -67,7 +67,7 @@ import appIcon from './assets/background/OpenStarry.png'
 
 const lacale = zhCn
 const config = ({
-  max: 1
+  grouping: true
 })
 const { proxy } = getCurrentInstance()
 const minimize = () => window.electron.ipcRenderer.send('window-minimize')

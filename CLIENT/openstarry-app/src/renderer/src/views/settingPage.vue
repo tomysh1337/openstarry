@@ -58,7 +58,9 @@
             <div class="setting-title">关闭主窗口时</div>
             <div class="setting-control">
               <div class="setting-info">缩小到系统托盘可让未完成任务继续运行。</div>
-              <el-select class="select-input compact-control" v-model="desktopSettings.closeBehavior" @change="saveDesktopSettings">
+              <el-select class="select-input compact-control" :model-value="desktopSettings.closeBehavior"
+                :disabled="!desktopSettingsLoaded || savingDesktopSettings.closeBehavior"
+                @change="saveDesktopSettings('closeBehavior', $event)">
                 <el-option label="缩小到系统托盘" value="tray" />
                 <el-option label="退出软件" value="quit" />
               </el-select>
@@ -69,7 +71,13 @@
             <div class="setting-title">开机静默启动</div>
             <div class="setting-control">
               <div class="setting-info">登录 Windows 后自动在系统托盘启动。</div>
-              <el-switch v-model="desktopSettings.launchAtLogin" @change="saveDesktopSettings" />
+              <el-switch
+                :model-value="desktopSettings.launchAtLogin"
+                :disabled="!desktopSettingsLoaded"
+                :loading="savingDesktopSettings.launchAtLogin"
+                aria-label="开机静默启动"
+                @change="saveDesktopSettings('launchAtLogin', $event)"
+              />
             </div>
           </div>
 
@@ -77,7 +85,13 @@
             <div class="setting-title">API 密钥保护</div>
             <div class="setting-control">
               <div class="setting-info">使用 Windows 凭据加密，可优先通过 Windows Hello 解锁。</div>
-              <el-switch v-model="desktopSettings.vault.enabled" @change="saveDesktopSettings" />
+              <el-switch
+                :model-value="desktopSettings.vault.enabled"
+                :disabled="!desktopSettingsLoaded"
+                :loading="savingDesktopSettings.vault"
+                aria-label="API 密钥保护"
+                @change="saveDesktopSettings('vault', { ...desktopSettings.vault, enabled: $event })"
+              />
             </div>
           </div>
 
@@ -169,25 +183,16 @@
               <div class="setting-info">
                 开启后实时显示AI当前正在调用的工具名称。
               </div>
-              <div class="mode-switch">
-                <div class="slider" :class="{ right: store.config.showToolLabels }" />
-
-                <button
-                  class="off-select"
-                  :class="{ active: !store.config.showToolLabels }"
-                  @click="switchMode('showToolLabels', 'off')"
-                >
-                  Off
-                </button>
-
-                <button
-                  class="on-select"
-                  :class="{ active: store.config.showToolLabels }"
-                  @click="switchMode('showToolLabels', 'on')"
-                >
-                  On
-                </button>
-              </div>
+              <el-switch
+                class="setting-toggle"
+                size="large"
+                :model-value="store.config.showToolLabels"
+                aria-label="在AI消息中显示工具调用标签"
+                inline-prompt
+                active-text="On"
+                inactive-text="Off"
+                @change="store.saveAppConfig('showToolLabels', $event)"
+              />
             </div>
           </div>
 
@@ -197,25 +202,16 @@
               <div class="setting-info">
                 开启有颜色主题可能适配不佳。
               </div>
-              <div class="mode-switch">
-                <div class="slider" :class="{ right: store.config.dark_theme }" />
-
-                <button
-                  class="off-select"
-                  :class="{ active: !store.config.dark_theme }"
-                  @click="switchMode('dark_theme', 'off')"
-                >
-                  Off
-                </button>
-
-                <button
-                  class="on-select"
-                  :class="{ active: store.config.dark_theme }"
-                  @click="switchMode('dark_theme', 'on')"
-                >
-                  On
-                </button>
-              </div>
+              <el-switch
+                class="setting-toggle"
+                size="large"
+                :model-value="store.config.dark_theme"
+                aria-label="启用深色主题"
+                inline-prompt
+                active-text="On"
+                inactive-text="Off"
+                @change="store.saveAppConfig('dark_theme', $event)"
+              />
             </div>
           </div>
         </div>
@@ -276,6 +272,7 @@
               <el-input
                 placeholder="http://expmale.com:7890 ,http://expmale.com:7890 "
                 v-model="store.config.httpProxyUrl"
+                :disabled="savingProxy"
                 class="line-input"
               >
               </el-input>
@@ -284,6 +281,7 @@
                 off
                 size="default"
                 @click="setNetProxy"
+                :loading="savingProxy"
                 class="confirm-button"
               >
                 保存
@@ -297,6 +295,7 @@
               <el-input
                 placeholder="localhost,127.0.0.1,expmale.com"
                 v-model="store.config.excludeUrl"
+                :disabled="savingProxy"
                 class="line-input"
               >
               </el-input>
@@ -305,6 +304,7 @@
                 off
                 size="default"
                 @click="setNetProxy"
+                :loading="savingProxy"
                 class="confirm-button"
               >
                 保存
@@ -323,7 +323,9 @@
             <div class="setting-title">电脑控制模式</div>
             <div class="setting-control">
               <div class="setting-info">明确提到电脑控制或任务确有需要时，可自动操作桌面与浏览器。</div>
-              <el-select class="select-input compact-control" v-model="desktopSettings.computerControlMode" @change="saveDesktopSettings">
+              <el-select class="select-input compact-control" :model-value="desktopSettings.computerControlMode"
+                :disabled="!desktopSettingsLoaded || savingDesktopSettings.computerControlMode"
+                @change="saveDesktopSettings('computerControlMode', $event)">
                 <el-option label="自动允许" value="auto" />
                 <el-option label="每次询问" value="ask" />
                 <el-option label="关闭" value="off" />
@@ -335,7 +337,13 @@
             <div class="setting-title">自动续写与长任务</div>
             <div class="setting-control">
               <div class="setting-info">让 Agent 在工具调用后继续执行，直到任务完成或达到运行上限。</div>
-              <el-switch v-model="desktopSettings.autoContinue.enabled" @change="saveDesktopSettings" />
+              <el-switch
+                :model-value="desktopSettings.autoContinue.enabled"
+                :disabled="!desktopSettingsLoaded"
+                :loading="savingDesktopSettings.autoContinue"
+                aria-label="自动续写与长任务"
+                @change="saveDesktopSettings('autoContinue', { ...desktopSettings.autoContinue, enabled: $event })"
+              />
             </div>
           </div>
 
@@ -343,7 +351,13 @@
             <div class="setting-title">不可逆操作确认</div>
             <div class="setting-control">
               <div class="setting-info">付款、永久删除、外部发送、账号与系统设置等操作执行前询问。</div>
-              <el-switch v-model="desktopSettings.confirmIrreversibleActions" @change="saveDesktopSettings" />
+              <el-switch
+                :model-value="desktopSettings.confirmIrreversibleActions"
+                :disabled="!desktopSettingsLoaded"
+                :loading="savingDesktopSettings.confirmIrreversibleActions"
+                aria-label="不可逆操作确认"
+                @change="saveDesktopSettings('confirmIrreversibleActions', $event)"
+              />
             </div>
           </div>
 
@@ -352,50 +366,32 @@
             <div class="setting-title">允许 Agent 操作文件</div>
             <div class="setting-control">
               <div class="setting-info">允许Agent对工作区文件进行修改，包括读取用户上传文件、查看工作区目录、新建或<strong>删改</strong>工作区文件。</div>
-              <div class="mode-switch">
-                <div class="slider" :class="{ right: store.config.fileOpration }" />
-
-                <button
-                  class="off-select"
-                  :class="{ active: !store.config.fileOpration }"
-                  @click="switchMode('fileOpration', 'off')"
-                >
-                  Off
-                </button>
-
-                <button
-                  class="on-select"
-                  :class="{ active: store.config.fileOpration }"
-                  @click="switchMode('fileOpration', 'on')"
-                >
-                  On
-                </button>
-              </div>
+              <el-switch
+                class="setting-toggle"
+                size="large"
+                :model-value="store.config.fileOpration"
+                aria-label="允许 Agent 操作文件"
+                inline-prompt
+                active-text="On"
+                inactive-text="Off"
+                @change="store.saveAppConfig('fileOpration', $event)"
+              />
             </div>
           </div>
           <div class="setting-card">
             <div class="setting-title">允许 Agent 执行命令</div>
             <div class="setting-control">
               <div class="setting-info">开放命令行权限给Agent，允许Agent在沙箱内执行命令。</div>
-              <div class="mode-switch">
-                <div class="slider" :class="{ right: store.config.commandOpration }" />
-
-                <button
-                  class="off-select"
-                  :class="{ active: !store.config.commandOpration }"
-                  @click="switchMode('commandOpration', 'off')"
-                >
-                  Off
-                </button>
-
-                <button
-                  class="on-select"
-                  :class="{ active: store.config.commandOpration }"
-                  @click="switchMode('commandOpration', 'on')"
-                >
-                  On
-                </button>
-              </div>
+              <el-switch
+                class="setting-toggle"
+                size="large"
+                :model-value="store.config.commandOpration"
+                aria-label="允许 Agent 执行命令"
+                inline-prompt
+                active-text="On"
+                inactive-text="Off"
+                @change="store.saveAppConfig('commandOpration', $event)"
+              />
             </div>
           </div>
           <div class="setting-card">
@@ -404,25 +400,16 @@
               <div class="setting-info" :class="{ danger_info: store.config.webSearch && store.config.knowledgeRetrieval}">
                 允许Agent使用网络搜索工具在互联网上搜索信息。
               </div>
-              <div class="mode-switch">
-                <div class="slider" :class="{ right: store.config.webSearch }" />
-
-                <button
-                  class="off-select"
-                  :class="{ active: !store.config.webSearch }"
-                  @click="switchMode('webSearch', 'off')"
-                >
-                  Off
-                </button>
-
-                <button
-                  class="on-select"
-                  :class="{ active: store.config.webSearch }"
-                  @click="switchMode('webSearch', 'on')"
-                >
-                  On
-                </button>
-              </div>
+              <el-switch
+                class="setting-toggle"
+                size="large"
+                :model-value="store.config.webSearch"
+                aria-label="允许 Agent 浏览网页"
+                inline-prompt
+                active-text="On"
+                inactive-text="Off"
+                @change="store.saveAppConfig('webSearch', $event)"
+              />
             </div>
           </div>
           <div class="setting-card">
@@ -431,50 +418,32 @@
               <div class="setting-info" :class="{ danger_info: store.config.webSearch && store.config.knowledgeRetrieval }">
                 允许Agent使用知识库检索工具在知识库中搜索信息。与网络搜索能力同时开启时，会降低模型知识库检索表现。
               </div>
-              <div class="mode-switch">
-                <div class="slider" :class="{ right: store.config.knowledgeRetrieval }" />
-
-                <button
-                  class="off-select"
-                  :class="{ active: !store.config.knowledgeRetrieval }"
-                  @click="switchMode('knowledgeRetrieval', 'off')"
-                >
-                  Off
-                </button>
-
-                <button
-                  class="on-select"
-                  :class="{ active: store.config.knowledgeRetrieval }"
-                  @click="switchMode('knowledgeRetrieval', 'on')"
-                >
-                  On
-                </button>
-              </div>
+              <el-switch
+                class="setting-toggle"
+                size="large"
+                :model-value="store.config.knowledgeRetrieval"
+                aria-label="允许 Agent 访问知识库"
+                inline-prompt
+                active-text="On"
+                inactive-text="Off"
+                @change="store.saveAppConfig('knowledgeRetrieval', $event)"
+              />
             </div>
           </div>
           <div class="setting-card">
             <div class="setting-title">允许 Agent 使用技能包</div>
             <div class="setting-control">
               <div class="setting-info">允许Agent加载技能包，获取技能包扩展。</div>
-              <div class="mode-switch">
-                <div class="slider" :class="{ right: store.config.skillLoad }" />
-
-                <button
-                  class="off-select"
-                  :class="{ active: !store.config.skillLoad }"
-                  @click="switchMode('skillLoad', 'off')"
-                >
-                  Off
-                </button>
-
-                <button
-                  class="on-select"
-                  :class="{ active: store.config.skillLoad }"
-                  @click="switchMode('skillLoad', 'on')"
-                >
-                  On
-                </button>
-              </div>
+              <el-switch
+                class="setting-toggle"
+                size="large"
+                :model-value="store.config.skillLoad"
+                aria-label="允许 Agent 使用技能包"
+                inline-prompt
+                active-text="On"
+                inactive-text="Off"
+                @change="store.saveAppConfig('skillLoad', $event)"
+              />
             </div>
           </div>
 
@@ -484,25 +453,16 @@
               <div class="setting-info">
                 开启后，图片将发送给模型进行理解，而不使用OCR工具提取文字。系统会自动检测模型是否具备视觉处理能力。
               </div>
-              <div class="mode-switch">
-                <div class="slider" :class="{ right: store.config.visionOn }" />
-
-                <button
-                  class="off-select"
-                  :class="{ active: !store.config.visionOn }"
-                  @click="switchMode('visionOn', 'off')"
-                >
-                  Off
-                </button>
-
-                <button
-                  class="on-select"
-                  :class="{ active: store.config.visionOn }"
-                  @click="switchMode('visionOn', 'on')"
-                >
-                  On
-                </button>
-              </div>
+              <el-switch
+                class="setting-toggle"
+                size="large"
+                :model-value="store.config.visionOn"
+                aria-label="启用模型视觉输入"
+                inline-prompt
+                active-text="On"
+                inactive-text="Off"
+                @change="store.saveAppConfig('visionOn', $event)"
+              />
             </div>
           </div>
 
@@ -512,25 +472,16 @@
               <div class="setting-info" :class="{ danger_info: store.config.agentAssign }">
                 开启智能体子代理模式，提供异步任务处理能力，不推荐在个人PC本地部署时开启。
               </div>
-              <div class="mode-switch">
-                <div class="slider" :class="{ right: store.config.agentAssign }" />
-
-                <button
-                  class="off-select"
-                  :class="{ active: !store.config.agentAssign }"
-                  @click="switchMode('agentAssign', 'off')"
-                >
-                  Off
-                </button>
-
-                <button
-                  class="on-select"
-                  :class="{ active: store.config.agentAssign }"
-                  @click="switchMode('agentAssign', 'on')"
-                >
-                  On
-                </button>
-              </div>
+              <el-switch
+                class="setting-toggle"
+                size="large"
+                :model-value="store.config.agentAssign"
+                aria-label="启用 Agent 子代理"
+                inline-prompt
+                active-text="On"
+                inactive-text="Off"
+                @change="store.saveAppConfig('agentAssign', $event)"
+              />
             </div>
           </div>
 
@@ -540,25 +491,16 @@
               <div class="setting-info" :class="{ danger_info: store.config.agentSwarm }">
                 开启多智能体协作模式，不推荐在个人PC本地部署时开启。开启此项默认将 <strong>Agent 子代理</strong> 视为已开启。
               </div>
-              <div class="mode-switch">
-                <div class="slider" :class="{ right: store.config.agentSwarm }" />
-
-                <button
-                  class="off-select"
-                  :class="{ active: !store.config.agentSwarm }"
-                  @click="switchMode('agentSwarm', 'off')"
-                >
-                  Off
-                </button>
-
-                <button
-                  class="on-select"
-                  :class="{ active: store.config.agentSwarm }"
-                  @click="switchMode('agentSwarm', 'on')"
-                >
-                  On
-                </button>
-              </div>
+              <el-switch
+                class="setting-toggle"
+                size="large"
+                :model-value="store.config.agentSwarm"
+                aria-label="启用 Agent-Term 蜂群模式"
+                inline-prompt
+                active-text="On"
+                inactive-text="Off"
+                @change="store.saveAppConfig('agentSwarm', $event)"
+              />
             </div>
           </div>
         </div>
@@ -575,25 +517,16 @@
               <div class="setting-info"  :class="{ danger_info: store.config.longtermMemory }">
                 让Agent自动整理会话中或工作区中保存的记忆，开启后，当记忆数量达到一定阈值时将自动触发。
               </div>
-              <div class="mode-switch">
-                <div class="slider" :class="{ right: store.config.longtermMemory }" />
-
-                <button
-                  class="off-select"
-                  :class="{ active: !store.config.longtermMemory }"
-                  @click="switchMode('longtermMemory', 'off')"
-                >
-                  Off
-                </button>
-
-                <button
-                  class="on-select"
-                  :class="{ active: store.config.longtermMemory }"
-                  @click="switchMode('longtermMemory', 'on')"
-                >
-                  On
-                </button>
-              </div>
+              <el-switch
+                class="setting-toggle"
+                size="large"
+                :model-value="store.config.longtermMemory"
+                aria-label="自动整理会话或工作区中的记忆"
+                inline-prompt
+                active-text="On"
+                inactive-text="Off"
+                @change="store.saveAppConfig('longtermMemory', $event)"
+              />
             </div>
           </div>
 
@@ -601,25 +534,16 @@
             <div class="setting-title">当上下文达到窗口大小限制时自动总结上下文</div>
             <div class="setting-control">
               <div class="setting-info">需同步设置上下文总结触发阈值与保留的窗口长度，若不进行设置，系统将在上下文达到窗口大小供应商限制时自动触发总结。</div>
-              <div class="mode-switch">
-                <div class="slider" :class="{ right: store.config.shorttermMemory }" />
-
-                <button
-                  class="off-select"
-                  :class="{ active: !store.config.shorttermMemory }"
-                  @click="switchMode('shorttermMemory', 'off')"
-                >
-                  Off
-                </button>
-
-                <button
-                  class="on-select"
-                  :class="{ active: store.config.shorttermMemory }"
-                  @click="switchMode('shorttermMemory', 'on')"
-                >
-                  On
-                </button>
-              </div>
+              <el-switch
+                class="setting-toggle"
+                size="large"
+                :model-value="store.config.shorttermMemory"
+                aria-label="当上下文达到窗口大小限制时自动总结上下文"
+                inline-prompt
+                active-text="On"
+                inactive-text="Off"
+                @change="store.saveAppConfig('shorttermMemory', $event)"
+              />
             </div>
           </div>
 
@@ -840,25 +764,16 @@
               <div class="setting-info">
                 工具的返回结果通常会携带大量的文本信息，极大增加Token消耗，如果是本地模型，将同时增加GPU的计算负担，某些供应商需要开启此选项。
               </div>
-              <div class="mode-switch">
-                <div class="slider" :class="{ right: store.config.remainToolsCache }" />
-
-                <button
-                  class="off-select"
-                  :class="{ active: !store.config.remainToolsCache }"
-                  @click="switchMode('remainToolsCache', 'off')"
-                >
-                  Off
-                </button>
-
-                <button
-                  class="on-select"
-                  :class="{ active: store.config.remainToolsCache }"
-                  @click="switchMode('remainToolsCache', 'on')"
-                >
-                  On
-                </button>
-              </div>
+              <el-switch
+                class="setting-toggle"
+                size="large"
+                :model-value="store.config.remainToolsCache"
+                aria-label="将过去的思维链以及工具返回内容回传接口"
+                inline-prompt
+                active-text="On"
+                inactive-text="Off"
+                @change="store.saveAppConfig('remainToolsCache', $event)"
+              />
             </div>
           </div>
 
@@ -886,25 +801,16 @@
               <div class="setting-info" :class="{ danger_info: store.config.pureChat }">
                 开启此选项将禁用Agent全部工具（含生成计划、多模态、联网搜索、文件操作等），适用于无工具调用能力的模型。
               </div>
-              <div class="mode-switch">
-                <div class="slider" :class="{ right: store.config.pureChat }" />
-
-                <button
-                  class="off-select"
-                  :class="{ active: !store.config.pureChat }"
-                  @click="switchMode('pureChat', 'off')"
-                >
-                  Off
-                </button>
-
-                <button
-                  class="on-select"
-                  :class="{ active: store.config.pureChat }"
-                  @click="switchMode('pureChat', 'on')"
-                >
-                  On
-                </button>
-              </div>
+              <el-switch
+                class="setting-toggle"
+                size="large"
+                :model-value="store.config.pureChat"
+                aria-label="开启纯对话模式"
+                inline-prompt
+                active-text="On"
+                inactive-text="Off"
+                @change="store.saveAppConfig('pureChat', $event)"
+              />
             </div>
           </div>
 
@@ -914,25 +820,16 @@
               <div class="setting-info" :class="{ danger_info: store.config.autoSaveConfig }">
                 开启后，每次对话时将当前工具权限、记忆、联网搜索和模型设置保存到本机。
               </div>
-              <div class="mode-switch">
-                <div class="slider" :class="{ right: store.config.autoSaveConfig }" />
-
-                <button
-                  class="off-select"
-                  :class="{ active: !store.config.autoSaveConfig }"
-                  @click="switchMode('autoSaveConfig', 'off')"
-                >
-                  Off
-                </button>
-
-                <button
-                  class="on-select"
-                  :class="{ active: store.config.autoSaveConfig }"
-                  @click="switchMode('autoSaveConfig', 'on')"
-                >
-                  On
-                </button>
-              </div>
+              <el-switch
+                class="setting-toggle"
+                size="large"
+                :model-value="store.config.autoSaveConfig"
+                aria-label="自动保存当前设置"
+                inline-prompt
+                active-text="On"
+                inactive-text="Off"
+                @change="store.saveAppConfig('autoSaveConfig', $event)"
+              />
             </div>
           </div>
 
@@ -965,7 +862,7 @@ import HomePage from './homePage.vue'
 import { mountToolSettings } from '@openstarry/workbench/settings'
 import '@openstarry/workbench/style.css'
 import { useAppCacheData } from '../store/app'
-import { OpenStarry_client_version, defaultCards, setHighlightTheme } from '../store/globalData.js'
+import { OpenStarry_client_version, defaultCards } from '../store/globalData.js'
 import { ConfirmDialog } from './component/comp/confirmDialog.js'
 
 const store = useAppCacheData()
@@ -993,6 +890,10 @@ const desktopSettings = ref({
     intervalMinutes: 5
   }
 })
+type DesktopSettings = typeof desktopSettings.value
+type DesktopSettingKey = Exclude<keyof DesktopSettings, 'sync'>
+const desktopSettingsLoaded = ref(false)
+const savingDesktopSettings = ref<Partial<Record<DesktopSettingKey, boolean>>>({})
 const runtimeStatus = ref({ phase: 'starting', message: '正在初始化' })
 const syncToken = ref('')
 const syncStatus = ref({
@@ -1014,7 +915,12 @@ const updatePageHeight = () => {
 onMounted(async () => {
   window.addEventListener('resize', updatePageHeight)
   showPage.value = true
-  desktopSettings.value = await window.api.system.getSettings()
+  try {
+    desktopSettings.value = await window.api.system.getSettings()
+    desktopSettingsLoaded.value = true
+  } catch {
+    ElMessage.error('读取设置失败，请重新打开设置页')
+  }
   runtimeStatus.value = await window.api.system.runtimeStatus()
 
   let syncEventSeen = false
@@ -1034,11 +940,23 @@ onBeforeUnmount(() => {
   unsubscribeSyncStatus?.()
 })
 
-const saveDesktopSettings = async () => {
-  const desktopOnlySettings = JSON.parse(JSON.stringify(desktopSettings.value))
-  delete desktopOnlySettings.sync
-  desktopSettings.value = await window.api.system.updateSettings(desktopOnlySettings)
-  ElMessage.success('设置已保存')
+const saveDesktopSettings = async <Key extends DesktopSettingKey>(key: Key, value: DesktopSettings[Key]) => {
+  if (!desktopSettingsLoaded.value || savingDesktopSettings.value[key]) return
+  const previous = desktopSettings.value[key]
+  desktopSettings.value[key] = value
+  savingDesktopSettings.value[key] = true
+  try {
+    // Persist only the changed section. A full response must not overwrite
+    // another in-flight setting or the sync form's unsaved edits.
+    const saved = await window.api.system.updateSettings(JSON.parse(JSON.stringify({ [key]: value })))
+    desktopSettings.value[key] = saved[key]
+    ElMessage.success('设置已保存')
+  } catch {
+    desktopSettings.value[key] = previous
+    ElMessage.error('设置保存失败，请重试')
+  } finally {
+    savingDesktopSettings.value[key] = false
+  }
 }
 
 const openLocalData = () => window.api.system.showData()
@@ -1117,18 +1035,24 @@ const changeModelTemp = (value) => {
 }
 
 /* Proxy */
+const savingProxy = ref(false)
 const setNetProxy = async () => {
-  store.saveAppConfig('httpProxyUrl', store.config.httpProxyUrl)
+  if (savingProxy.value) return
+  savingProxy.value = true
   try {
-    const res = await window.api.setProxy(
+    await window.api.setProxy(
       store.config.httpProxyUrl,
       store.config.httpsProxyUrl,
       store.config.excludeUrl
     )
+    for (const key of ['httpProxyUrl', 'httpsProxyUrl', 'excludeUrl']) {
+      store.saveAppConfig(key, store.config[key])
+    }
     ElMessage.success('代理已保存')
   } catch (err) {
     ElMessage.error('代理保存失败')
-    console.error(err)
+  } finally {
+    savingProxy.value = false
   }
 }
 
@@ -1315,17 +1239,6 @@ function storeWebContentFilter() {
   store.config.webContentFilter = webContentFilter.value
   store.saveAppConfig('webContentFilter', webContentFilter.value)
   ElMessage.success('保存成功')
-}
-
-/* Generic boolean mode switch */
-const switchMode = (key: keyof typeof store.config, target: 'on' | 'off') => {
-  const value = target === 'on'
-
-  // Update reactive config
-  store.config[key] = value as any
-
-  // Persist to local storage / backend
-  store.saveAppConfig(key as string, value)
 }
 
 </script>
@@ -1757,74 +1670,28 @@ span.el-popper__arrow {
   border-color: color-mix(in srgb, var(--OpenStarry-border-disabled) 30%, transparent);
 }
 
-/* ---------------------------------- */
-.mode-switch {
-  position: absolute;
-  right: 14px;
-  display: flex;
-  background: color-mix(in srgb, var(--OpenStarry-default-light-color) 32%, transparent);
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--OpenStarry-border-light) 31.8%, transparent);
-  box-shadow: inset 1px -1px 16px color-mix(in srgb, var(--OpenStarry-primary-color) 8.3%, transparent);
+/* Keep the switch in the row layout so descriptions cannot flow beneath it. */
+.setting-toggle {
+  flex: 0 0 auto;
+  margin-left: auto;
+  --el-switch-on-color: var(--OpenStarry-primary-dark);
+  --el-switch-off-color: var(--OpenStarry-secondary-dark-color);
 }
 
-.mode-switch button {
-  flex: 1;
-  height: 24px;
-  border: none;
-  background-color: transparent;
-  cursor: pointer;
-  z-index: 1;
-  font-size: 12px;
-  color: var(--OpenStarry-secondary-dark-color);
-  transition: color 0.25s ease;
+.setting-toggle :deep(.el-switch__core) {
+  min-width: 64px;
+  /* Override the global translucent switch palette for these text labels. */
+  border-color: transparent !important;
+  background-color: var(--el-switch-off-color) !important;
 }
 
-.mode-switch button.active {
-  color: var(--OpenStarry-darkest-color);
+.setting-toggle.is-checked :deep(.el-switch__core) {
+  background-color: var(--el-switch-on-color) !important;
 }
 
-/* 共用 active 时的光晕与背景效果（original used color-mix） */
-.mode-switch:active .slider,
-.mode-switch:active:deep(.slider) {
-  z-index: 999;
-  box-shadow:
-    var(--OpenStarry-shadow-lg),
-    0 0 0 2px color-mix(in srgb, var(--OpenStarry-primary-color) 14%, transparent);
-  backdrop-filter: saturate(180%) blur(3px);
-  transition: all 0.3s var(--OpenStarry-cubic-bezier);
-  background-color: color-mix(in srgb, var(--OpenStarry-default-light-color) 1%, transparent);
+.setting-toggle :deep(.el-switch__inner-wrapper) {
+  color: var(--OpenStarry-lightest-color);
 }
-
-.highlight-select {
-  color: var(--OpenStarry-secondary-dark-color);
-  transition: color 0.25s ease;
-}
-
-.highlight-select.right {
-  color: var(--OpenStarry-darkest-color);
-  transition: color 0.25s ease;
-}
-
-/* Slider */
-.slider {
-  position: absolute;
-  width: calc(50% + 4px);
-  height: calc(100% + 2px);
-  margin-top: -1px;
-  margin-left: -1px;
-  border-radius: 32px;
-  transition: all 0.3s var(--OpenStarry-cubic-bezier);
-  box-shadow:
-    var(--OpenStarry-shadow-md),
-    0 0 0 2px color-mix(in srgb, var(--OpenStarry-primary-color) 47.1%, transparent);
-  background-color: var(--OpenStarry-lightest-color);
-}
-
-.slider.right {
-  transform: translateX(87%);
-}
-/* ---------------------------------- */
 
 :deep(.el-slider__runway) {
   background-color: var(--OpenStarry-panel-layer-0-background);
@@ -1869,7 +1736,7 @@ span.el-popper__arrow {
 
 .setting-control > .setting-info { flex: 1 1 160px; line-height: 1.65; overflow-wrap: anywhere; }
 .setting-control > .compact-control { flex: 0 1 190px; min-width: 150px; }
-.setting-control > .mode-switch, .setting-control > .el-switch { flex-shrink: 0; }
+.setting-control > .el-switch { flex-shrink: 0; }
 .setting-control > .line-input, .setting-control > .number-input, .setting-control > .el-slider { flex: 1 1 180px; min-width: 0; }
 .button-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .button-row :deep(.el-button), .sync-row :deep(.el-button) { margin-left: 0; }
@@ -2073,7 +1940,7 @@ span.el-popper__arrow {
 
 .setting-control > .setting-info { flex: 1 1 160px; line-height: 1.65; overflow-wrap: anywhere; }
 .setting-control > .compact-control { flex: 0 1 190px; min-width: 150px; }
-.setting-control > .mode-switch, .setting-control > .el-switch { flex-shrink: 0; }
+.setting-control > .el-switch { flex-shrink: 0; }
 .setting-control > .line-input, .setting-control > .number-input, .setting-control > .el-slider { flex: 1 1 180px; min-width: 0; }
 .button-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .button-row :deep(.el-button), .sync-row :deep(.el-button) { margin-left: 0; }
