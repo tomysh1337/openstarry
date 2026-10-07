@@ -1,3 +1,4 @@
+import copy
 import time
 from typing import Annotated
 
@@ -88,7 +89,7 @@ async def assign_sub_assistant(
             "content": instruction
         }
 
-        initial_config = parent_state.get("config")
+        initial_config = copy.deepcopy(parent_state.get("config") or {})
         initial_config["role_prompt"] = {
             "name": agent_identity,
             "definition": system_prompt,
@@ -132,11 +133,9 @@ async def assign_sub_assistant(
             "context_fold_split_mark": [],
             "error": "",
         }
-        config = state.get("config")
-
         task_id = await team_task_manager.submit_task(
             initial_state=initial_state,
-            config=config,
+            config=initial_config,
             agent_name=assistant_name,
             generation_id=generation_id
         )
@@ -151,7 +150,7 @@ async def assign_sub_assistant(
                 "event_name": "tool_exec_chunk_rtn",
                 "tool_name": "assign_sub_assistant",
                 "tool_call_id": tool_call_id,
-                "content": f"{assistant_name}: {task_description}",
+                "content": f"子代理已提交：{assistant_name}\n任务 ID: {task_id}\n{task_description}",
                 "chunk_position": "end",
                 "status": "success",
             }

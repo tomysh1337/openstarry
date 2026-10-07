@@ -1,6 +1,6 @@
 {
   "name": "openstarry-nextgen",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "OpenStarry NextGen integrated AI desktop application",
   "main": "./out/main/index.js",
   "author": "tomysh",

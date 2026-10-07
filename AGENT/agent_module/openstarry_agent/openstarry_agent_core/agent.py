@@ -91,8 +91,7 @@ class AgentRuningtime:
             agent = await agent_creator.create_sub_agent(agent_name, initial_state.get("agent_role"), config)
 
             if not isinstance(agent, CompiledStateGraph):
-                logger.error(f"Create sub-agent failed: {agent}")
-                return
+                raise RuntimeError(f"Create sub-agent failed: {agent}")
 
             stream = agent.astream(
                 initial_state,
@@ -126,7 +125,7 @@ class AgentRuningtime:
         finally:
             # Remove from running task registry
             self._running_tasks.pop(initial_state["task_id"], None)
-            if agent:
+            if isinstance(agent, CompiledStateGraph):
                 await agent_creator.done(agent)
 
 

@@ -79,6 +79,7 @@ extraResources:
     to: backend/AGENT
     filter:
       - '**/*'
+      - '!tests/**'
       - '!**/.venv/**'
       - '!**/__pycache__/**'
       - '!**/*.log'

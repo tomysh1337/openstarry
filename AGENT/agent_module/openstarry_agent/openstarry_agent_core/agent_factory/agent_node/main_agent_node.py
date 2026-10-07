@@ -8,6 +8,9 @@ from langgraph.types import Overwrite
 from openstarry_agent.commons.common_func import convert_generation_id_to_message_node_id
 from openstarry_agent.openstarry_event_pipe.stream_event.agent_stream_writer import AgentStreamWriter, AgentStreamEvent
 from openstarry_agent.openstarry_agent_core.agent_factory.prompt import *
+from openstarry_agent.openstarry_agent_core.agent_factory.delegation import (
+    DELEGATION_NOT_STARTED, DELEGATION_RETRY_PROMPT, needs_delegation_call,
+)
 from openstarry_agent.openstarry_agent_core.LLM.llm_adapter import LlmNodeAdapter
 from openstarry_agent.openstarry_agent_core.sandbox_manager.agent_sandbox_manager import agent_sandbox
 from openstarry_agent.openstarry_agent_core.context_manager.context_process import ai_context_manager
@@ -480,7 +483,9 @@ class MainAgentNode(AgentNodeBase):
         if need_alert:
             logger.warning(f"Inject `SYSTEM_ALERT_PROMPT`: {self.SYSTEM_ALERT_PROMPT}")
             llm_input = llm_input + [SystemMessage(self.SYSTEM_ALERT_PROMPT)]
-        if state.get("error_detail"):
+        if state.get("error_detail") == DELEGATION_RETRY_PROMPT:
+            llm_input = llm_input + [SystemMessage(DELEGATION_RETRY_PROMPT)]
+        elif state.get("error_detail"):
             logger.warning(f"Inject `CRITICAL WARN`: {state.get("error_detail")}")
             llm_input = llm_input + [SystemMessage(f"CRITICAL WARN: {state.get("error_detail")}. If you are trying to do that, stop immediately any way!")]
 
@@ -661,6 +666,34 @@ class MainAgentNode(AgentNodeBase):
                 )
             else:
                 raise e
+
+        delegation_retry = state.get("error_detail") == DELEGATION_RETRY_PROMPT
+        if needs_delegation_call(ai_msg_chunk, state, self.tool_set) or (
+            delegation_retry and not ai_msg_chunk.tool_calls
+        ):
+            retry = not delegation_retry
+            notice = (
+                "\n\n尚未实际创建子代理，正在请求模型提交任务…\n\n"
+                if retry else DELEGATION_NOT_STARTED
+            )
+            event_writer.send_event(
+                event=AgentStreamEvent.LLM_CHUNK_RETURN, target=target,
+                data={"event_name": "content_chunk_rtn", "content": notice},
+            )
+            if retry:
+                event_writer.send_event(
+                    event=AgentStreamEvent.LLM_STREAM_END, target=target,
+                    data={"event_name": "node_stream_end", "content": "[Delegation requires a tool call]"},
+                )
+                return Command(update={
+                    "llm_calls": 1, "llm_retry_count": 1, "error": "others",
+                    "error_detail": DELEGATION_RETRY_PROMPT,
+                    "loaded_skills_cache": new_skills_cache,
+                })
+            if isinstance(ai_msg_chunk.content, str):
+                ai_msg_chunk.content += notice
+            else:
+                ai_msg_chunk.content.append({"type": "text", "text": notice})
 
         logger.info(f"Generate chunks num: {chunk_num}")
 

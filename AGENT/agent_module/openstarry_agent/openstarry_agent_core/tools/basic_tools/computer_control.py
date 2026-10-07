@@ -6,9 +6,23 @@ from langchain.tools import tool, InjectedToolCallId
 from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from langchain_core.messages import ToolMessage
+from pydantic import BaseModel, Field
 
 
-@tool(description="""Control Windows desktop applications and browsers through OpenStarry NextGen.
+class ComputerControlInput(BaseModel):
+    # LangChain's inferred schema mistakes the named `args` field for *args and
+    # exposes Pydantic's internal v__args field. Keep the bridge contract explicit.
+    action: str
+    args: dict[str, Any] | None = Field(
+        default=None, description="Arguments passed to the selected computer action."
+    )
+    irreversible: bool = False
+    description: str = ""
+    state: Annotated[dict | None, InjectedState] = None
+    tool_call_id: Annotated[str | None, InjectedToolCallId] = None
+
+
+@tool(args_schema=ComputerControlInput, description="""Control Windows desktop applications and browsers through OpenStarry NextGen.
 Use this when the user asks to operate the computer or when completing the task requires visible UI interaction.
 Supported actions: list_apps, list_windows, get_window, launch_app, get_window_state,
 activate_window, click, press_key, type_text, scroll, set_value, drag, perform_secondary_action.
