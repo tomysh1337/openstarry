@@ -1,8 +1,21 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, clipboard } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
 // Custom APIs for renderer
 const api = {
+  getPathForFile: file => webUtils.getPathForFile(file),
+  readClipboardImageBase64: () => { const image = clipboard.readImage(); return image.isEmpty() ? null : image.toPNG().toString('base64') },
+  voice: {
+    status: () => ipcRenderer.invoke('voice:status'),
+    configure: value => ipcRenderer.invoke('voice:configure', value),
+    install: () => ipcRenderer.invoke('voice:install'),
+    start: () => ipcRenderer.invoke('voice:start'),
+    stop: () => ipcRenderer.invoke('voice:stop'),
+    transcribe: bytes => ipcRenderer.invoke('voice:transcribe', bytes),
+    synthesize: text => ipcRenderer.invoke('voice:synthesize', text),
+    reference: () => ipcRenderer.invoke('voice:reference'),
+    onStatus: callback => subscribe('voice:status', callback)
+  },
   ide: {
     open: () => ipcRenderer.invoke('ide:open'),
     write: value => ipcRenderer.invoke('ide:write', value),

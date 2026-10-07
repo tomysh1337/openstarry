@@ -2622,7 +2622,6 @@ async function onDrop(e: DragEvent) {
   if (isWebChat.value) { e.preventDefault(); ElMessage.info('GPT 网页版当前支持文本对话'); return }
   if (isUploading.value) return
 
-  const { webUtils } = require('electron')
   e.preventDefault()
 
   dragEnterCounter = 0
@@ -2634,7 +2633,7 @@ async function onDrop(e: DragEvent) {
   const path_list = files
     .map(f => {
       try {
-        return webUtils.getPathForFile(f)
+        return window.api.getPathForFile(f)
       } catch (e) {
         console.warn('getPathForFile failed:', e)
         return null
@@ -2667,11 +2666,11 @@ async function onPaste(e: ClipboardEvent) {
   }
   if (isUploading.value) return
 
-  const { webUtils, clipboard, nativeImage } = require('electron')
 
   const items = Array.from(e.clipboardData?.items || [])
   console.log('Clipboard items:', items)
 
+  if (items.some(item => item.kind === 'file')) e.preventDefault()
   let handled = false
   const pathList: string[] = []
 
@@ -2686,7 +2685,7 @@ async function onPaste(e: ClipboardEvent) {
     console.log('Processing clipboard item:', item)
 
     try {
-      const filePath = webUtils.getPathForFile(file)
+      const filePath = window.api.getPathForFile(file)
       if (filePath) {
         pathList.push(filePath)
         continue
@@ -2695,7 +2694,10 @@ async function onPaste(e: ClipboardEvent) {
 
     try {
       const buffer = await file.arrayBuffer()
-      const base64 = Buffer.from(buffer).toString('base64')
+      const bytes = new Uint8Array(buffer)
+      let binary = ''
+      for (let i = 0; i < bytes.length; i += 32768) binary += String.fromCharCode(...bytes.subarray(i, i + 32768))
+      const base64 = btoa(binary)
 
       const tempPath = await window.api.createTempFileFromBase64(base64, file.name || `paste_${Date.now()}.png`)
 
@@ -2707,30 +2709,16 @@ async function onPaste(e: ClipboardEvent) {
     }
   }
 
-  // fallback：Electron clipboard
-  if (!handled) {
+  // Read images through the isolated preload; ordinary text keeps native paste.
+  if (!handled && !items.some(item => item.type === 'text/plain')) {
     try {
-      const image = clipboard.readImage()
-
-      if (!image.isEmpty()) {
+      const base64 = window.api.readClipboardImageBase64()
+      if (base64) {
         e.preventDefault()
-
-        const buffer = image.toPNG()
-        const base64 = buffer.toString('base64')
-
-        const tempPath = await window.api.createTempFileFromBase64({
-          base64,
-          fileName: `paste_${Date.now()}.png`,
-        })
-
-        if (tempPath) {
-          console.log('Clipboard image fallback success:', tempPath)
-          pathList.push(tempPath)
-        }
+        const tempPath = await window.api.createTempFileFromBase64(base64, `paste_${Date.now()}.png`)
+        if (tempPath) pathList.push(tempPath)
       }
-    } catch (err) {
-      console.error('clipboard fallback failed:', err)
-    }
+    } catch (err) { console.error('clipboard fallback failed:', err) }
   }
 
   if (pathList.length === 0) return

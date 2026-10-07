@@ -533,7 +533,7 @@ class MainAgentNode(AgentNodeBase):
                             "content": think
                         }
                     )
-                elif content:
+                if content:
                     event_writer.send_event(
                         event=AgentStreamEvent.LLM_CHUNK_RETURN,
                         target=target,

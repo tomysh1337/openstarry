@@ -1,3 +1,18 @@
 @import './settings-ui.css';
 @import './workbench-ui.css';
 @import './picker.css';
+
+.os-voice-panel { display:flex; flex-direction:column; gap:8px; margin-top:8px; padding:10px; border:1px solid var(--border, #72778355); border-radius:9px; font:inherit; color:inherit; min-width:0; }
+.os-voice-panel details { min-width:0; }
+.os-voice-panel summary { cursor:pointer; font-weight:600; padding:3px 0; }
+.os-voice-panel label { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.os-voice-panel select, .os-voice-panel textarea { font:inherit; color:inherit; background:var(--panel, transparent); border:1px solid var(--border, #72778388); border-radius:6px; padding:6px; max-width:100%; }
+.os-voice-panel option { background:Canvas; color:CanvasText; }
+.os-voice-panel textarea { width:100%; box-sizing:border-box; min-height:58px; margin-top:8px; }
+.os-voice-buttons { display:flex; flex-wrap:wrap; gap:6px; }
+.os-voice-panel button { font:inherit; color:inherit; border:1px solid var(--border, #72778388); border-radius:6px; padding:5px 9px; background:var(--panel, transparent); cursor:pointer; }
+.os-voice-panel button:disabled { opacity:.45; cursor:default; }
+.os-voice-panel button:focus-visible, .os-voice-panel select:focus-visible { outline:2px solid #648cff; outline-offset:2px; }
+.os-voice-status { margin:0; font-size:12px; overflow-wrap:anywhere; }
+.os-voice-note { font-size:12px; line-height:1.65; opacity:.75; }
+.os-voice-panel [hidden] { display:none !important; }

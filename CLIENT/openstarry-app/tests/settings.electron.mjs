@@ -37,6 +37,7 @@ const fixture = (name, handler) =>
     calls.push({ name, args })
     return handler(...args)
   })
+fixture('voice:status', () => ({ phase: 'stopped', message: 'Fixture voice', config: { preset: 'laomushi', referenceText: '', speed: 1, language: 'all_zh' } }))
 fixture('readData', (key) => data.get(key) || [])
 fixture('writeData', (key, value) => data.set(key, value) && true)
 fixture('runtime:status:get', () => ({

@@ -96,6 +96,11 @@
           </div>
 
           <div class="setting-card">
+            <div class="setting-title">本地实时语音</div>
+            <div class="setting-info">在 IDE / Agent 输入区开始语音对话，支持 GPT-SoVITS 和老牧师音色。</div>
+            <VoiceSettings />
+          </div>
+          <div class="setting-card">
             <div class="setting-title">本地数据与备份</div>
             <div class="setting-control">
               <div class="setting-info">聊天、附件和配置保存在本机；每日压缩备份并保留 30 份。</div>
@@ -859,6 +864,7 @@ import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import HomePage from './homePage.vue'
+import VoiceSettings from './component/VoiceSettings.vue'
 import { mountToolSettings } from '@openstarry/workbench/settings'
 import '@openstarry/workbench/style.css'
 import { useAppCacheData } from '../store/app'

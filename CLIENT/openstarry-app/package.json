@@ -1,6 +1,6 @@
 {
   "name": "openstarry-nextgen",
-  "version": "1.3.3",
+  "version": "1.4.0",
   "description": "OpenStarry NextGen integrated AI desktop application",
   "main": "./out/main/index.js",
   "author": "tomysh",
@@ -21,7 +21,8 @@
     "test:sync": "node --test tests/syncProtocol.test.mjs",
     "test:settings-ui": "node tests/settings.ui.mjs",
     "test:desktop-smoke": "node tests/desktopSmoke.cdp.mjs",
-    "electron:generate-icons": "electron-icon-builder --input=./resources/OpenStarry.png --output=build --flatten"
+    "electron:generate-icons": "electron-icon-builder --input=./resources/OpenStarry.png --output=build --flatten",
+    "test:voice-ui": "node tests/voice.ui.mjs"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",

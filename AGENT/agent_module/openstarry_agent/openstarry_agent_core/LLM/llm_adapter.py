@@ -9,6 +9,7 @@ from openstarry_agent.commons.type_def import AgentConfigSchema, ProviderNotFoun
 from openstarry_agent.commons.logger import logger
 
 from .llm_factory import get_llm_node
+from .messages import normalize_system_messages
 from openstarry_agent.global_config import BASE_DIR
 
 
@@ -120,6 +121,7 @@ class LlmNodeAdapter:
             - Pass reasoning if supported
         """
 
+        input = normalize_system_messages(input)
         fall_back_provider=fall_back_config.get("models_provider")
         fall_back_model_name=fall_back_config.get("model_name")
         fall_back_api_key=fall_back_config.get("api_key")
@@ -214,6 +216,7 @@ class LlmNodeAdapter:
             - Keep official LangChain behavior
         """
 
+        input = normalize_system_messages(input)
         fall_back_provider=fall_back_config.get("models_provider")
         fall_back_model_name=fall_back_config.get("model_name")
         fall_back_api_key=fall_back_config.get("api_key")

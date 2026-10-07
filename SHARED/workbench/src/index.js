@@ -16,6 +16,7 @@ import { zipSync, unzipSync, strToU8 } from 'fflate'
 import MarkdownIt from 'markdown-it'
 import { icon } from './icons.js'
 import { createPicker } from './picker.js'
+import { createVoicePanel } from './voicePanel.js'
 import { createReasoningPicker } from './reasoningPicker.js'
 import { createChatMessage } from './chatView.js'
 import { createChatTabs } from './chatTabs.js'
@@ -176,6 +177,17 @@ export async function mountWorkbench(host, options = {}) {
   const agentButtons = node('div', 'os-composer-actions'); agentButtons.append(iconButton('引用当前文件', 'attach', () => { if (workspace.active) { references.add(workspace.active); renderReferences(); laterPersist(); agentInput.focus() } }), agentMode.element, modelPicker.element, configureModel, reasoningPicker.element, webThinking, agentStop, agentSend)
   webThinking.after(safetyPicker.element)
   agentComposer.append(sourceRow, webBar, contextChips, agentInput, agentButtons)
+  let voiceTurn = false
+  const voicePanel = options.voice ? createVoicePanel({ api: options.voice,
+    onTranscript: async (text, onText) => {
+      if (workspace.chatSource === 'gpt-web') throw Error('实时语音请先切换到 API 来源')
+      if (agentController) throw Error('当前任务尚未结束，请稍候再说')
+      voiceTurn = true
+      try { await sendAgent(text, onText) } finally { voiceTurn = false }
+    },
+    onInterrupt: () => { if (voiceTurn) agentController?.abort(Error('语音对话已打断')) }
+  }) : null
+  if (voicePanel) agentComposer.append(voicePanel.element)
   const agentFoot = node('div', 'os-agent-foot', '修改先审查，再保存'); agentFoot.append(node('span', '', 'Ctrl + Enter'))
   agentPane.append(agentHead, sessionBar, history, chat, agentState, questionDock, agentStatusbar, statusDetails, agentComposer, agentFoot)
   if (subagentView) agentPane.insertBefore(subagentView.element, agentStatusbar)
@@ -242,17 +254,17 @@ export async function mountWorkbench(host, options = {}) {
     refreshModels().catch(report)
   }
   async function selectAgentChat(id) {
-    if (id !== workspace.chatId) { rememberChat(); workspace.activateChat(id); restoreChat(); await persist() }
+    if (id !== workspace.chatId) { await voicePanel?.stop(); rememberChat(); workspace.activateChat(id); restoreChat(); await persist() }
     else closeHistory()
   }
   async function closeAgentChat(id) {
     const focusInTabs = chatTabs.element.contains(document.activeElement)
-    rememberChat(); workspace.closeChat(id); restoreChat()
+    await voicePanel?.stop(); rememberChat(); workspace.closeChat(id); restoreChat()
     if (focusInTabs) chatTabs.focus(workspace.chatId)
     await persist()
   }
   async function newAgentChat() {
-    rememberChat(); workspace.createChat(); restoreChat(); agentInput.focus(); await persist()
+    await voicePanel?.stop(); rememberChat(); workspace.createChat(); restoreChat(); agentInput.focus(); await persist()
   }
   function renderChatTabs() {
     chatTabs.update(workspace.chatTabs.map(id => ({ id, title: workspace.chatTitle(id), state: agentTask?.id === id ? agentTask.waiting ? 'waiting' : 'running' : 'idle' })), workspace.chatId)
@@ -272,7 +284,7 @@ export async function mountWorkbench(host, options = {}) {
   }
   async function selectWorkspace(next) {
     if (agentController || runController) throw Error('请先停止当前任务再切换项目')
-    clearTimeout(saveTimer); await persist(); workspace = next; activeWorkspace = workspace; comparison = currentPanel === 'review'; restoreChat(); command.value = workspace.command; await persist(); await renderProjectSelect(); renderAll(); renderChat(true)
+    await voicePanel?.stop(); clearTimeout(saveTimer); await persist(); workspace = next; activeWorkspace = workspace; comparison = currentPanel === 'review'; restoreChat(); command.value = workspace.command; await persist(); await renderProjectSelect(); renderAll(); renderChat(true)
   }
   async function renderProjectSelect() { const list = await projectStore.list(); if (!list.some(item => item.id === workspace.id)) list.push(workspace); projectSelect.setItems(list.map(item => ({ value: item.id, label: item.name, icon: 'folder' })), workspace.id) }
   async function createProject() {
@@ -487,10 +499,11 @@ export async function mountWorkbench(host, options = {}) {
     if (options.exportFile) await options.exportFile(name, bytes)
     else { const url = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' })); const link = node('a'); link.href = url; link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000) }
   }
-  async function sendAgent() {
-    if (agentController || !agentInput.value.trim()) return
+  async function sendAgent(spokenText, onVoiceText) {
+    const inputText = typeof spokenText === 'string' ? spokenText : agentInput.value.trim()
+    if (agentController || !inputText.trim()) return
     rememberChat()
-    const targetWorkspace = workspace, chatId = workspace.chatId, messages = workspace.chat, text = agentInput.value.trim()
+    const targetWorkspace = workspace, chatId = workspace.chatId, messages = workspace.chat, text = inputText.trim()
     const useWeb = workspace.chatSource === 'gpt-web'
     const controller = new AbortController(), task = { id: chatId, controller, source: useWeb ? 'gpt-web' : 'api', preparing: true, state: useWeb ? '正在连接 GPT 网页版…' : '正在连接模型…', modelValue: modelPicker.value }
     const settings = loadToolSettings()
@@ -506,8 +519,8 @@ export async function mountWorkbench(host, options = {}) {
       if (useWeb && !options.web) throw Error('请在桌面端打开 GPT 网页版会话')
       if (!useWeb && (!config?.endpoint || !config?.model)) throw Error('请先在供应商设置中选择模型')
       task.config = config; task.preparing = false; task.state = useWeb ? '等待网页接收消息…' : settings.enabled ? '正在处理项目任务…' : '正在回答 · 工具未启用'
-      if (workspace.chatId === chatId) { agentInput.value = ''; references.clear(); renderReferences() }
-      else { const session = workspace.conversation(chatId); session.draft = ''; session.references = [] }
+      if (workspace.chatId === chatId && !onVoiceText) { agentInput.value = ''; references.clear(); renderReferences() }
+      else if (!onVoiceText) { const session = workspace.conversation(chatId); session.draft = ''; session.references = [] }
       messages.push({ role: 'user', content: text, references: attachments, context: attachedContent }); answer = { role: 'assistant', content: '', parts: [], status: 'running', reasoningEffort }; messages.push(answer)
       if (useWeb) answer.web = { requestId: crypto.randomUUID(), messageId: crypto.randomUUID(), sessionId: chatId, thinking: workspace.chatThinking, prompt: text + (attachedContent ? '\n引用的项目内容：' + attachedContent : ''), mode: settings.enabled ? 'agent' : 'ask', source: 'chatgpt-web' }
       renderChat(workspace.chatId === chatId); refreshModels().catch(report)
@@ -528,7 +541,7 @@ export async function mountWorkbench(host, options = {}) {
             let part = answer.parts.find(part => part.type === event.type && part.id === event.id && event.id)
             if (!part) { part = { type: event.type, id: event.id, text: '' }; answer.parts.push(part); if (event.type === 'text' && answer.content) answer.content += '\n\n' }
             part.text += event.text
-            if (event.type === 'text') answer.content += event.text
+            if (event.type === 'text') { answer.content += event.text; onVoiceText?.(event.text) }
             task.state = event.type === 'reasoning' ? '正在思考…' : '正在接收回复…'
           } else if (event.type === 'notice') { if (!answer.parts.some(part => part.type === 'notice' && part.text === event.text)) answer.parts.push({ ...event }) }
           else if (event.type === 'tool' && settings.showTools) {
@@ -542,6 +555,7 @@ export async function mountWorkbench(host, options = {}) {
     } catch (error) {
       if (answer) { answer.status = useWeb ? 'interrupted' : controller.signal.aborted ? 'stopped' : 'error'; answer.parts.push({ type: 'notice', text: error.message }); for (const part of answer.parts) if (part.phase === 'running') { part.phase = 'stopped'; part.text = error.message } }
       else report(error)
+      if (onVoiceText) throw error
     }
     finally { cancelAnimationFrame(chatFrame); chatFrame = null; agentController = agentTask = null; if (!disposed) renderChat(); await persist(); await options.onChat?.(targetWorkspace); if (!disposed) { renderTree(); refreshModels().catch(report) } }
   }
@@ -604,5 +618,5 @@ export async function mountWorkbench(host, options = {}) {
   const onHide = () => { clearTimeout(saveTimer); persist() }; document.addEventListener('visibilitychange', onHide)
   await renderProjectSelect(); renderAll(); renderReferences(); selectPanel('editor'); refreshModels().catch(report)
   void refreshSubagents()
-  return { refresh: () => { renderAll(); renderProjectSelect().catch(report); refreshModels().catch(report) }, setTheme: theme => { const next = localStorage.getItem('openstarry.ide.theme') || theme; if (root.dataset.theme !== next) { root.dataset.theme = next; renderEditor() } }, destroy: () => { if (disposed) return; disposed = true; clearTimeout(subagentTimer); subagentView?.close(); sandboxView?.close(); safetyPicker.destroy(); for (const view of activeMessageViews) view.close(); activeMessageViews.clear(); clearTimeout(saveTimer); cancelAnimationFrame(chatFrame); agentController?.abort(Error('IDE 已关闭')); runController?.abort(Error('IDE 已关闭')); document.removeEventListener('visibilitychange', onHide); closeHtmlPreview(preview); projectSelect.destroy(); agentMode.destroy(); sourcePicker.destroy(); modelPicker.destroy(); reasoningPicker.destroy(); chatTabs.destroy(); persist(); editor?.destroy(); root.remove() } }
+  return { stopVoice: () => voicePanel?.stop(), refresh: () => { renderAll(); renderProjectSelect().catch(report); refreshModels().catch(report) }, setTheme: theme => { const next = localStorage.getItem('openstarry.ide.theme') || theme; if (root.dataset.theme !== next) { root.dataset.theme = next; renderEditor() } }, destroy: () => { if (disposed) return; disposed = true; voicePanel?.close(); clearTimeout(subagentTimer); subagentView?.close(); sandboxView?.close(); safetyPicker.destroy(); for (const view of activeMessageViews) view.close(); activeMessageViews.clear(); clearTimeout(saveTimer); cancelAnimationFrame(chatFrame); agentController?.abort(Error('IDE 已关闭')); runController?.abort(Error('IDE 已关闭')); document.removeEventListener('visibilitychange', onHide); closeHtmlPreview(preview); projectSelect.destroy(); agentMode.destroy(); sourcePicker.destroy(); modelPicker.destroy(); reasoningPicker.destroy(); chatTabs.destroy(); persist(); editor?.destroy(); root.remove() } }
 }

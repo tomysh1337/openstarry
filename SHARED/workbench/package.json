@@ -11,7 +11,8 @@
     "./runtime": "./src/runtime.js",
     "./webChat": "./src/webChat.js",
     "./textReveal": "./src/textReveal.js",
-    "./style.css": "./src/style.css"
+    "./style.css": "./src/style.css",
+    "./voicePanel": "./src/voicePanel.js"
   },
   "scripts": {
     "dev": "vite",

@@ -21,6 +21,12 @@ asarUnpack:
   - node_modules/@oai/cua/bin/**
   - node_modules/@oai/sky/bin/**
 extraResources:
+  - from: ../../LOCAL/voice-runtime
+    to: voice-runtime
+    filter:
+      - '*.py'
+      - '*.txt'
+      - '*.md'
   - from: vendor/runtime-tools/node.exe
     to: runtime/node.exe
   - from: vendor/runtime-tools/cloudflared.exe

@@ -2,6 +2,7 @@ import { app, dialog, ipcMain, clipboard } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import trash from 'trash'
+import { streamHttp } from '../app/streamHttp.mjs'
 import { IdeWorkspace } from '../app/ideWorkspace.mjs'
 import { GptWebService } from '../app/gptWebService.mjs'
 export function registerIdeIpc(getWindow, { webService } = {}) {
@@ -34,25 +35,13 @@ export function registerIdeIpc(getWindow, { webService } = {}) {
   })
   handle('stop', ({ requestId }) => workspace.stop(jobs.get(requestId)))
   handle('http', async ({ id, url, method, headers, body, stream }, event) => {
-    const parsed = new URL(url)
-    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) throw Error('请求地址格式错误')
-    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 180000); requests.set(id, controller)
+    const controller = new AbortController(); requests.set(id, controller)
+    let lastSeq = 0
     try {
-      const response = await fetch(parsed, { method, headers, body, signal: controller.signal }); const reader = response.body.getReader(); const parts = []; let total = 0
-      const streamed = stream && response.ok && /text\/event-stream/i.test(response.headers.get('content-type') || '')
-      const decoder = new TextDecoder()
-      const emit = text => { if (text && !event.sender.isDestroyed()) event.sender.send('ide:http-chunk', { id, text }) }
-      try {
-        while (true) {
-          const { done, value } = await reader.read(); if (done) break
-          total += value.length; if (total > 4 * 1024 * 1024) throw Error('响应超过大小上限')
-          if (streamed) emit(decoder.decode(value, { stream: true })); else parts.push(Buffer.from(value))
-        }
-        if (streamed) emit(decoder.decode())
-      }
-      finally { await reader.cancel().catch(() => {}) }
-      return { status: response.status, headers: Object.fromEntries(response.headers), streamed, text: Buffer.concat(parts).toString('utf8') }
-    } finally { clearTimeout(timer); requests.delete(id) }
+      const result = await streamHttp({ url, method, headers, body, stream, controller,
+        onChunk: text => { if (text && !event.sender.isDestroyed()) event.sender.send('ide:http-chunk', { id, text, seq: ++lastSeq }) } })
+      return { ...result, lastSeq }
+    } finally { requests.delete(id) }
   })
   handle('cancel-http', ({ id }) => requests.get(id)?.abort())
   handle('gpt-status', ({ project }) => web.status(project))
